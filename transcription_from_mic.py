@@ -1,9 +1,9 @@
 import argparse
-import moonshine.live_transcription
+import moonshine.src.live_transcription as live_transcription
 
 SUPPORTED_MODELS = ["moonshine"]
 MODEL = "moonshine"
-DEFAULT_MODEL_SIZES = {"moonshine":"moonshine/base"}
+DEFAULT_MODEL_SIZES = {"moonshine": "moonshine/base"}
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -19,5 +19,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
     model = args.model
 
-    if(model=='moonshine'):
-        moonshine.live_transcription.main(DEFAULT_MODEL_SIZES[model], include_captions=True)
+    if model == 'moonshine':
+        live_transcription.main(DEFAULT_MODEL_SIZES[model], include_captions=True)

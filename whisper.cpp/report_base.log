@@ -1,0 +1,35 @@
+Report on model evaluation. The duration of sample recording is 11s (JFK speech)
+-----------------------------
+Model base-q2_k
+Runtime: whisper_print_timings:    total time = 75884.08 ms
+----------------------------------
+Model base-q3_k
+Runtime: whisper_print_timings:    total time = 13679.53 ms
+----------------------------------
+Model base-q4_0
+Runtime: whisper_print_timings:    total time = 12605.55 ms
+----------------------------------
+Model base-q4_1
+Runtime: whisper_print_timings:    total time = 12297.82 ms
+----------------------------------
+Model base-q4_k
+Runtime: whisper_print_timings:    total time = 11891.63 ms
+----------------------------------
+Model base-q5_0
+Runtime: whisper_print_timings:    total time = 14371.28 ms
+----------------------------------
+Model base-q5_1
+Runtime: whisper_print_timings:    total time = 14392.70 ms
+----------------------------------
+Model base-q5_k
+Runtime: whisper_print_timings:    total time = 13279.46 ms
+----------------------------------
+Model base-q6_k
+Runtime: whisper_print_timings:    total time = 13613.33 ms
+----------------------------------
+Model base-q8_0
+Runtime: whisper_print_timings:    total time = 12820.43 ms
+----------------------------------
+Model base
+Runtime: whisper_print_timings:    total time = 18179.38 ms
+----------------------------------

@@ -1,0 +1,20 @@
+tokenizers>=0.19.0
+onnxruntime
+huggingface-hub
+librosa
+
+# file transcription
+argparse
+torch
+transformers
+evaluate
+normalizer
+tqdm
+numpy
+
+# real-time transcription
+silero-vad
+sounddevice
+fastrtc>=0.0.6
+useful-moonshine-onnx@git+https://git@github.com/usefulsensors/moonshine.git#subdirectory=moonshine-onnx
+numba

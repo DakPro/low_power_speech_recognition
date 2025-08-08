@@ -17,7 +17,8 @@ def assert_audio_size(audio):
     assert len(audio.shape) == 2, "audio should be of shape [batch, samples]"
     num_seconds = audio.size / 16000
     assert 0.1 < num_seconds < 64, (
-        "Moonshine models support audio segments that are between 0.1s and 64s in a single transcribe call. For transcribing longer segments, pre-segment your audio and provide shorter segments."
+        "Moonshine models support audio segments that are between 0.1s and 64s in a single transcribe call. "
+        "For transcribing longer segments, pre-segment your audio and provide shorter segments."
     )
     return num_seconds
 

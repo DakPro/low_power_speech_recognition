@@ -20,4 +20,5 @@ if __name__ == '__main__':
     model = args.model
 
     if model == 'moonshine':
-        live_transcription.main(DEFAULT_MODEL_SIZES[model], include_captions=True)
+        live_transcription.main(DEFAULT_MODEL_SIZES[model], print_transcription=True)
+x

@@ -91,11 +91,11 @@ def soft_reset(vad_iterator):
     vad_iterator.current_sample = 0
 
 
-def main(model_name="moonshine/base", include_captions=False):
+def main(model_name="moonshine/base", dev_info=False, print_transcription=False):
     if model_name not in ["moonshine/base", "moonshine/tiny"]:
         raise '''Invalid model name: models supported: "moonshine/base", "moonshine/tiny"'''
 
-    if include_captions:
+    if dev_info:
         print(f"Loading Moonshine model '{model_name}' (using ONNX runtime) ...")
 
     global transcribe, caption_cache
@@ -125,16 +125,18 @@ def main(model_name="moonshine/base", include_captions=False):
 
     recording = False
 
-    if include_captions:
+    if dev_info:
         print("Press Ctrl+C to quit live captions.\n")
 
     with stream:
-        print_captions("Ready...")
+        if dev_info:
+            print_captions("Ready...")
         try:
             while True:
                 chunk, status = q.get()
-                if status:
-                    print(status)
+                if print_transcription:
+                    if status:
+                        print(status)
 
                 speech = np.concatenate((speech, chunk))
                 if not recording:
@@ -159,7 +161,8 @@ def main(model_name="moonshine/base", include_captions=False):
                         soft_reset(vad_iterator)
 
                     if (time.time() - start_time) > MIN_REFRESH_SECS:
-                        print_captions(transcribe(speech))
+                        if print_transcription:
+                            print_captions(transcribe(speech))
                         start_time = time.time()
 
         except KeyboardInterrupt:
@@ -171,7 +174,7 @@ def main(model_name="moonshine/base", include_captions=False):
                     speech = np.concatenate((speech, chunk))
                 end_recording(speech, do_print=False)
 
-            if include_captions:
+            if dev_info:
                 print(f"""
 
                  model_name :  {model_name}
@@ -181,7 +184,7 @@ def main(model_name="moonshine/base", include_captions=False):
         mean inference time :  {(transcribe.inference_secs / transcribe.number_inferences):.2f}s
       model realtime factor :  {(transcribe.speech_secs / transcribe.inference_secs):0.2f}x
     """)
-            if caption_cache:
+            if caption_cache and print_transcription:
                 print(f"Cached captions.\n{' '.join(caption_cache)}")
 
             return caption_cache

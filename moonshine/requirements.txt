@@ -4,17 +4,25 @@ huggingface-hub
 librosa
 
 # file transcription
-argparse
+argparse~=1.4.0
+torch~=2.7.1
+transformers~=4.55.0
+evaluate~=0.4.5
+normalizer~=0.2.1
+tqdm~=4.67.1
+numpy~=2.2.6
+
+# real-time transcription
+silero-vad
+sounddevice~=0.5.2
+fastrtc>=0.0.6
+useful-moonshine-onnx@git+https://git@github.com/usefulsensors/moonshine.git#subdirectory=moonshine-onnx
+numba
+
+# evaluation
 torch
 transformers
 evaluate
 normalizer
 tqdm
-numpy
-
-# real-time transcription
-silero-vad
-sounddevice
-fastrtc>=0.0.6
-useful-moonshine-onnx@git+https://git@github.com/usefulsensors/moonshine.git#subdirectory=moonshine-onnx
-numba
+datasets~=3.6.0

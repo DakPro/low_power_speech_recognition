@@ -1,2 +1,5 @@
 .venv
 .idea
+evaluation/README.md
+evaluation/spgispeech_eval.py
+evaluation

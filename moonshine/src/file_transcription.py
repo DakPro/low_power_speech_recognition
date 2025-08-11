@@ -1,4 +1,6 @@
 from pathlib import Path
+
+import numpy
 import tokenizers
 from .model import MoonshineOnnxModel
 
@@ -6,11 +8,14 @@ from . import ASSETS_DIR
 
 
 def load_audio(audio):
-    if isinstance(audio, (str, Path)):
+    if isinstance(audio, numpy.ndarray):
+        return audio[None, ...].astype(numpy.float32)
+    elif isinstance(audio, (str, Path)):
         import librosa
-
         audio, _ = librosa.load(audio, sr=16_000)
-    return audio[None, ...]
+        return audio[None, ...]
+    else:
+        raise Exception("Invalid audio type: ", str(type(audio)))
 
 
 def assert_audio_size(audio):

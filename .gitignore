@@ -1,5 +1,6 @@
 .venv
 .idea
-evaluation/README.md
-evaluation/spgispeech_eval.py
 evaluation
+/evaluation
+!evaluation/eval.py
+moonshine/src/__pycache__

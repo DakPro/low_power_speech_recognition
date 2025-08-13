@@ -1,8 +1,11 @@
 from datasets import load_dataset, Audio
 from evaluate import load
 import itertools
+import tempfile
+import soundfile as sf
 
 wer = load("wer")
+
 file = open(".venv/huggingface_token")
 huggingface_access_token = file.readline().strip()
 file.close()
@@ -20,7 +23,7 @@ datasetParams = {
 datasetColumnNames = {
     "kensho/spgispeech": ('audio', 'transcript'),
     "distil-whisper/earnings22": ('audio', 'transcription'),
-    "edinburghcstr/ami" : ('audio', 'text')
+    "edinburghcstr/ami": ('audio', 'text')
 }
 
 
@@ -32,21 +35,31 @@ def prepare_dataset(datasetName):
 
 
 def compare(lazyListResult):
-    audioLimit = 1000
+    audioLimit = 10
     lazyListResult = list(itertools.islice(lazyListResult, audioLimit))
-    predictedText = list(map(lambda x: x[0][0], lazyListResult))
+    print(lazyListResult)
+    predictedText = list(map(lambda x: x[0], lazyListResult))
     trueText = list(map(lambda x: x[1], lazyListResult))
     score = wer.compute(predictions=predictedText, references=trueText)
     return score
+
+
+def array_into_file(audio_array, sr):
+    # Create temporary wav file
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        sf.write(tmp.name, audio_array, sr)
+        tmp_path = tmp.name
+    return tmp_path
 
 
 def evaluate_on_dataset(transcribe, datasetName):
     preparedDataset = prepare_dataset(datasetName)
 
     def f(x):
-        aud = x[0]['array']
+        aud = array_into_file(x[0]['array'], 16000)
         transcript = x[1]
         return transcribe(aud), transcript
+
     processedDataset = map(f, preparedDataset)
     accuracy = compare(processedDataset)
     return accuracy

@@ -8,9 +8,7 @@ from . import ASSETS_DIR
 
 
 def load_audio(audio):
-    if isinstance(audio, numpy.ndarray):
-        return audio[None, ...].astype(numpy.float32)
-    elif isinstance(audio, (str, Path)):
+    if isinstance(audio, (str, Path)):
         import librosa
         audio, _ = librosa.load(audio, sr=16_000)
         return audio[None, ...]
@@ -38,7 +36,10 @@ def transcribe(audio, model="moonshine/base"):
     assert_audio_size(audio)
 
     tokens = model.generate(audio)
-    return load_tokenizer().decode_batch(tokens)
+    ans = load_tokenizer().decode_batch(tokens)
+    if ans is not None:
+        ans = ans[0]    # keeping the desired format
+    return ans
 
 
 def load_tokenizer():

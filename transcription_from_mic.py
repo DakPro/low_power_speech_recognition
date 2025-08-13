@@ -21,4 +21,3 @@ if __name__ == '__main__':
 
     if model == 'moonshine':
         live_transcription.main(DEFAULT_MODEL_SIZES[model], print_transcription=True)
-x

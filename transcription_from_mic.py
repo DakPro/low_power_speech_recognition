@@ -1,5 +1,5 @@
 import argparse
-import moonshine.src.live_transcription as live_transcription
+import moonshine.src.live_trans as live_transcription
 
 SUPPORTED_MODELS = ["moonshine"]
 MODEL = "moonshine"

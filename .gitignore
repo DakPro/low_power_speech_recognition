@@ -1,6 +1,3 @@
 .venv
 .idea
-evaluation
-/evaluation
-!evaluation/eval.py
 moonshine/src/__pycache__

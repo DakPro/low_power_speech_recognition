@@ -1,0 +1,1 @@
+from .file_trans import transcribe

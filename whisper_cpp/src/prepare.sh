@@ -6,6 +6,7 @@ if [ "$#" -lt 1 ]; then
 else
   model="$1"
 fi
-./download-ggml-model.sh "$model"
+./models/download-ggml-model.sh "$model"
+pwd
 cmake -B build
 cmake --build build -j --config Release

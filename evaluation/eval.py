@@ -37,7 +37,6 @@ def prepare_dataset(datasetName):
 def compare(lazyListResult):
     audioLimit = 10
     lazyListResult = list(itertools.islice(lazyListResult, audioLimit))
-    print(lazyListResult)
     predictedText = list(map(lambda x: x[0], lazyListResult))
     trueText = list(map(lambda x: x[1], lazyListResult))
     score = wer.compute(predictions=predictedText, references=trueText)

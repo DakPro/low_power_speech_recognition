@@ -1,29 +1,25 @@
-import subprocess
+import os
 from pathlib import Path
-
-import numpy
-import soundfile as sf
-import tempfile
 import subprocess
+
+LOCAL_PATH = Path(__file__).parent.joinpath("src")
+MODEL = "base"
 
 
 def preheat():
-    subprocess.run("./src/prepare.sh", stdout=subprocess.DEVNULL)
-
-
-def array_into_file(audio_array, sr):
-    # Create temporary wav file
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-        sf.write(tmp.name, audio_array, sr)
-        tmp_path = tmp.name
-    return tmp_path
+    OLD_PATH = os.getcwd()
+    os.chdir(LOCAL_PATH)
+    subprocess.run(args=[], executable=f"{LOCAL_PATH}/prepare.sh", stdout=subprocess.DEVNULL)
+    os.chdir(OLD_PATH)
 
 
 def transcribe(audio):
-    if isinstance(audio, numpy.ndarray):
-        audio = array_into_file(audio, 16000)
     if isinstance(audio, (str, Path)):
-        completedProcess = subprocess.run(args=["-f", "samples/jfk.wav"], executable="./src/build/bin/whisper-cli")
+        OLD_PATH = os.getcwd()
+        os.chdir(LOCAL_PATH)
+        completedProcess = subprocess.run(["build/bin/whisper-cli", "-m", "models/ggml-base.bin", "--no-timestamps", "-f", audio],
+                                          stderr=subprocess.DEVNULL, stdout=subprocess.PIPE, text=True)
+        os.chdir(OLD_PATH)
         if completedProcess.returncode != 0:
             raise Exception("Error in running whisper_cpp:\n", completedProcess.stderr)
         return completedProcess.stdout

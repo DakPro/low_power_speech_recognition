@@ -17,7 +17,8 @@ def transcribe(audio):
     if isinstance(audio, (str, Path)):
         OLD_PATH = os.getcwd()
         os.chdir(LOCAL_PATH)
-        completedProcess = subprocess.run(["build/bin/whisper-cli", "-m", "models/ggml-base.bin", "--no-timestamps", "-f", audio],
+        completedProcess = subprocess.run(["build/bin/whisper-cli", "-m", f"models/ggml-{MODEL}.bin",
+                                           "--no-timestamps", "-f", audio],
                                           stderr=subprocess.DEVNULL, stdout=subprocess.PIPE, text=True)
         os.chdir(OLD_PATH)
         if completedProcess.returncode != 0:

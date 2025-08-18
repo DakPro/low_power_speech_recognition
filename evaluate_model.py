@@ -1,7 +1,7 @@
 import argparse
 import os
 import subprocess
-from evaluation.eval import main as evaluate
+from evaluation.WER import main as evaluate
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

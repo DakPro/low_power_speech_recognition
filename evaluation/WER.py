@@ -1,3 +1,5 @@
+import time
+
 from datasets import load_dataset, Audio
 from evaluate import load
 import itertools

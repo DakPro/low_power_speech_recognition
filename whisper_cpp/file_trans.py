@@ -3,7 +3,6 @@ from pathlib import Path
 import subprocess
 
 LOCAL_PATH = Path(__file__).parent.joinpath("src")
-MODEL = "base"
 
 
 def preheat():
@@ -13,11 +12,11 @@ def preheat():
     os.chdir(OLD_PATH)
 
 
-def transcribe(audio):
+def transcribe(audio, model="base"):
     if isinstance(audio, (str, Path)):
         OLD_PATH = os.getcwd()
         os.chdir(LOCAL_PATH)
-        completedProcess = subprocess.run(["build/bin/whisper-cli", "-m", f"models/ggml-{MODEL}.bin",
+        completedProcess = subprocess.run(["build/bin/whisper-cli", "-m", f"models/ggml-{model}.bin",
                                            "--no-timestamps", "-f", audio],
                                           stderr=subprocess.DEVNULL, stdout=subprocess.PIPE, text=True)
         os.chdir(OLD_PATH)

@@ -33,11 +33,11 @@ segmental transcription, the result for the start of a segment is taken.
 
 | Model               | sRTF on rPi 4 | RTF on rPi 4 | UPL*, seconds | WER on SPGISpeech | WER on Earnings22 | WER on AMI | 
 |---------------------|---------------|--------------|---------------|-------------------|-------------------|------------| 
-| Moonshine           | 2.8-3.5 (1)   |              | 0.2 + 0.2×RTF |                   |                   |            | 
+| Moonshine  (base)   | 0.28-0.35 (1) | 0.64         | 0.2 + 0.2×RTF |                   |                   |            | 
 | Whisper.cpp (tiny)  | 30xRTF/X **   | 0.39 (2)     | X + 30×RTF    |                   |                   |            |
 | Whisper.cpp (base)  | same as above | 0.74 (2)     | same as above |                   |                   |            |
 | Whisper.cpp (small) | same as above | 2.44 (2)     | same as above |                   |                   |            |
-| Kuytai              |               |              |               |                   |                   |            |
+| Kuytai              | \>1           | 10           | not feasible  |                   |                   |            |
 
 UPL* - listed UPLs are theoretical and valid only if RTF on device is < 1. 
 Formulas for values are given using standard configuration of models (read below for more details).
@@ -46,7 +46,7 @@ Formulas for values are given using standard configuration of models (read below
 transcribing it. The architecture transcribes audio in 30 s chunks only, thus sRTF depends on X.
 In combination with UPL explanation, X just defines balance between UPL and sRTF.
 
-(1) - Higher RTFs were observed on more consistent/faster speeches.
+(1) - Lower RTFs were observed on more consistent/faster speeches.
 (2) - RTF for whisper depends on length of an audio being transcribed. The RTF evaluation is done on 90s audio sample,
 as due to "30s-input-only" architecture constraint whisper gives highest RTFs on audios with length divisible by 30.
 

@@ -24,8 +24,12 @@ For further details, see evaluation/README.md
 
 ## Table of evaluated models
 
-RTF - Real-Time Factor = transcription time / audio length
-sRTF - Streaming Real-Time Factor =  transcription time / speech length
+*RTF* - Real-Time Factor = transcription time / audio length.
+
+*sRTF* - Streaming Real-Time Factor =  transcription time / speech length.
+
+*UPL* - User Perceived Latency, or latency = average time it takes for a spoken word to get displayed. For models with
+segmental transcription, the result for the start of a segment is taken.   
 
 | Model               | sRTF on rPi 4 | RTF on rPi 4 | UPL*, seconds | WER on SPGISpeech | WER on Earnings22 | WER on AMI | 
 |---------------------|---------------|--------------|---------------|-------------------|-------------------|------------| 

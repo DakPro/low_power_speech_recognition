@@ -1,7 +1,13 @@
 import argparse
-import WER
-from functools import partial
+import os
 import re
+import sys
+from functools import partial
+
+import WER
+
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(parent_dir)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

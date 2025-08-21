@@ -1,14 +1,23 @@
 import argparse
-import os
-import subprocess
-from evaluation.WER import evaluate as evaluate
+import WER
 from functools import partial
 import re
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', type=str, help='model name')
-    model_name = parser.parse_args().model
+    parser.add_argument('--wer', action='store_true', help='flag whether to evaluate WER')
+    parser.add_argument("all", action='store_true', help='flag whether to evaluate WER and ___ (TODO);'
+                                                         'if used, --wer and other such flags have no effect')
+    args = parser.parse_args()
+    model_name = args.model
+    f_wer = args.wer
+    if args.all:
+        f_wer = True
+
+    # REMINDER: after implementing new metrix, add them to the if statement in the next line
+    if not f_wer:
+        f_wer = True
 
     # moonshine
     if model_name == "moonshine":
@@ -25,4 +34,6 @@ if __name__ == '__main__':
         transcribe = partial(_transcribe, model=re.match("whisper_cpp/(.*)$", model_name).group(0))
 
     # noinspection PyUnboundLocalVariable
-    evaluate(transcribe)
+    if f_wer:
+        WER.evaluate(transcribe)
+

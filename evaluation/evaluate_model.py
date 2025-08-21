@@ -1,7 +1,7 @@
 import argparse
 import os
 import subprocess
-from evaluation.WER import main as evaluate
+from evaluation.WER import evaluate as evaluate
 from functools import partial
 import re
 

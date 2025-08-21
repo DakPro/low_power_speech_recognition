@@ -66,7 +66,7 @@ def evaluate_on_dataset(transcribe, datasetName):
     return accuracy
 
 
-def main(transcribe):
+def evaluate(transcribe):
     for datasetName in availableDatasets:
         accuracy = evaluate_on_dataset(transcribe, datasetName)
         print("WER on", datasetName, ":", accuracy)
@@ -75,4 +75,4 @@ def main(transcribe):
 if __name__ == "__main__":
     from moonshine.src.file_trans import transcribe as trans
 
-    main(trans)
+    evaluate(trans)

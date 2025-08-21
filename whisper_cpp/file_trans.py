@@ -22,7 +22,8 @@ def transcribe(audio):
                                           stderr=subprocess.DEVNULL, stdout=subprocess.PIPE, text=True)
         os.chdir(OLD_PATH)
         if completedProcess.returncode != 0:
-            raise Exception("Error in running whisper_cpp:\n", completedProcess.stderr)
+            raise Exception("Error in running whisper_cpp:\n Code:", completedProcess.returncode,
+                            "\n Message:", completedProcess.stderr)
         return completedProcess.stdout
     else:
         raise Exception("Audio has unexpected type:", type(audio))

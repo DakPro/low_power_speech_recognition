@@ -1,14 +1,11 @@
-import time
-
 from datasets import load_dataset, Audio
 from evaluate import load
-import itertools
 import tempfile
 import soundfile as sf
 
 wer = load("wer")
 
-file = open(".venv/huggingface_token")
+file = open("../.venv/huggingface_token")
 huggingface_access_token = file.readline().strip()
 file.close()
 
@@ -18,9 +15,9 @@ availableDatasets = [
     "edinburghcstr/ami"
 ]
 datasetParams = {
-    "kensho/spgispeech": {"name": "test", "token": huggingface_access_token, "split": "test", "streaming": True},
-    "distil-whisper/earnings22": {"name": "chunked", "split": "test", "streaming": True},
-    "edinburghcstr/ami": {"name": "ihm", "split": "test", "streaming": True, "trust_remote_code": True}
+    "kensho/spgispeech": {"name": "test", "token": huggingface_access_token, "split": "test"},
+    "distil-whisper/earnings22": {"name": "chunked", "split": "test"},
+    "edinburghcstr/ami": {"name": "ihm", "split": "test", "trust_remote_code": True}
 }
 datasetColumnNames = {
     "kensho/spgispeech": ('audio', 'transcript'),
@@ -36,28 +33,32 @@ def prepare_dataset(datasetName):
     return map(lambda x: [x[i] for i in datasetColumnNames[datasetName]], dataset)
 
 
-def compare(lazyListResult):
-    audioLimit = 10
-    lazyListResult = list(itertools.islice(lazyListResult, audioLimit))
-    predictedText = list(map(lambda x: x[0], lazyListResult))
-    trueText = list(map(lambda x: x[1], lazyListResult))
+def compare(resultList):
+    predictedText = list(map(lambda x: x[0], resultList))
+    trueText = list(map(lambda x: x[1], resultList))
     score = wer.compute(predictions=predictedText, references=trueText)
     return score
 
 
-def array_into_file(audio_array, sr):
-    # Create temporary wav file
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-        sf.write(tmp.name, audio_array, sr)
-        tmp_path = tmp.name
-    return tmp_path
-
+# def array_into_file(audio_array, sr):
+#     # Create temporary wav file
+#     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+#         sf.write(tmp.name, audio_array, sr)
+#         tmp_path = tmp.name
+#     return tmp_path
+#
 
 def evaluate_on_dataset(transcribe, datasetName):
     preparedDataset = prepare_dataset(datasetName)
+    global cnt
+    cnt = 0
 
     def f(x):
-        aud = array_into_file(x[0]['array'], 16000)
+        global cnt
+        cnt += 1
+        # if cnt % 10 == 0:
+        print(cnt)
+        aud = x[0]['path']
         transcript = x[1]
         return transcribe(aud), transcript
 

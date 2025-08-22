@@ -27,9 +27,9 @@ if __name__ == '__main__':
 
     # moonshine
     if model_name == "moonshine":
-        from moonshine.src.file_trans import transcribe
+        from moonshine.apple_src.file_trans import transcribe
     elif re.match("moonshine/.*", model_name):
-        from moonshine.src.file_trans import transcribe as _transcribe
+        from moonshine.apple_src.file_trans import transcribe as _transcribe
         transcribe = partial(_transcribe, model=model_name)
 
     # whisper_cpp

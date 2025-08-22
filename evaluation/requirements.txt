@@ -1,1 +1,4 @@
 librosa
+datasets
+evaluate
+jiwer

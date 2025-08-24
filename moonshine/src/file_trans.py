@@ -26,26 +26,34 @@ def assert_audio_size(audio):
     return num_seconds
 
 
-def transcribe(audio, model="moonshine/base"):
-    if isinstance(model, str):
-        model = MoonshineOnnxModel(model_name=model)
-    assert isinstance(model, MoonshineOnnxModel), (
-        f"Expected a MoonshineOnnxModel model or a model name, not a {type(model)}"
-    )
-    audio = load_audio(audio)
-    assert_audio_size(audio)
-
-    tokens = model.generate(audio)
-    ans = load_tokenizer().decode_batch(tokens)
-    if ans is not None:
-        ans = ans[0]    # keeping the desired format
-    return ans
-
-
 def load_tokenizer():
     tokenizer_file = ASSETS_DIR / "tokenizer.json"
     tokenizer = tokenizers.Tokenizer.from_file(str(tokenizer_file))
     return tokenizer
+
+
+models = {}
+tokenizer = load_tokenizer()
+
+
+def transcribe(audio, model_name="moonshine/base"):
+    try:
+        model = models[model_name]
+    except KeyError as e:
+        if isinstance(model_name, str):
+            model = MoonshineOnnxModel(model_name=model_name)
+        else:
+            raise Exception(f"Expected a model name, not a {type(model_name)}")
+        models[model_name] = model
+
+    audio = load_audio(audio)
+    assert_audio_size(audio)
+
+    tokens = model.generate(audio)
+    ans = tokenizer.decode_batch(tokens)
+    if ans is not None:
+        ans = ans[0]  # keeping the desired format
+    return ans
 
 
 def benchmark(audio, model="moonshine/base"):

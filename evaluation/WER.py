@@ -1,7 +1,11 @@
-from datasets import load_dataset, Audio
+import os
+
+import datasets
+from datasets import load_dataset, Audio, Dataset, IterableDataset
 from evaluate import load
-import tempfile
-import soundfile as sf
+import re
+import functools
+from typing import Tuple, List, Callable, Iterable, cast
 
 wer = load("wer")
 
@@ -9,67 +13,106 @@ file = open("../.venv/huggingface_token")
 huggingface_access_token = file.readline().strip()
 file.close()
 
+# List of used Datasets, can be expended by yourself.
+# !!! When adding new datasets, please go through the dictionaries below.
 availableDatasets = [
     "kensho/spgispeech",
     "distil-whisper/earnings22",
     "edinburghcstr/ami"
 ]
+
+# Parameters for loading datasets from datasets library
 datasetParams = {
-    "kensho/spgispeech": {"name": "test", "token": huggingface_access_token, "split": "test"},
+    "kensho/spgispeech": {"name": "test", "token": huggingface_access_token, "split": "test",
+                          "trust_remote_code": True,
+                          "streaming": True},
     "distil-whisper/earnings22": {"name": "chunked", "split": "test"},
     "edinburghcstr/ami": {"name": "ihm", "split": "test", "trust_remote_code": True}
 }
+
+# Different datasets may have different column names
+# By default: 'audio' for audio and 'transcript' for transcription
+# !!! Please specify in the dictionary below if columns names differ
 datasetColumnNames = {
-    "kensho/spgispeech": ('audio', 'transcript'),
-    "distil-whisper/earnings22": ('audio', 'transcription'),
-    "edinburghcstr/ami": ('audio', 'text')
+    # "kensho/spgispeech": {'transcript'},
+    "distil-whisper/earnings22": {'transcript': 'transcription'},
+    "edinburghcstr/ami": {'transcription': 'text'}
+}
+
+# Some datasets have unconventional format of transcripts
+# !!! Please specify formating functions here
+datasetFormatingFunction = {
+    "edinburghcstr/ami": lambda text: re.sub(r"\b([A-Z])\b", r"\1.",
+                                             re.sub(r"\s+", " ", re.sub(r"([.,!?])", r" \1 ", text.upper()))).strip()
 }
 
 
-def prepare_dataset(datasetName):
+class Counter:
+    def __init__(self):
+        self.count = 0
+
+    def inc(self) -> None:
+        self.count += 1
+        if self.count % 10 == 0:
+            print(self.count)
+
+
+def prepare_dataset(datasetName: str, streaming=False) -> Iterable[Tuple[str, str]]:
+    specialNames = datasetColumnNames[datasetName]
+
+    print(f"Loading {datasetName} dataset...", end='')
     dataset = load_dataset(datasetName, **datasetParams[datasetName])
-    dataset.cast_column('audio', Audio(sampling_rate=16000))
-    print("Dataset structure:", dataset)
-    return map(lambda x: [x[i] for i in datasetColumnNames[datasetName]], dataset)
+    print("Loaded.")
+
+    dataset = dataset.rename_columns({specialNames[i]: i for i in specialNames})
+    dataset.remove_columns(list(set(dataset.column_names) - {'audio', 'transcript'}))
+    if dataset.features['audio'].sampling_rate != 16000:
+        dataset.cast_column('audio', Audio(sampling_rate=16000))
+
+    print(dataset)
+    if isinstance(dataset, Dataset):
+        pass
+        return map(lambda x: (x['audio'], x['transcript']), dataset)
+
+    elif isinstance(dataset, IterableDataset):
+        pass
+        return map(lambda x: (x['audio'], x['transcript']), dataset)
+
+    else:
+        raise Exception("Unexpected dataset type")
 
 
-def compare(resultList):
-    predictedText = list(map(lambda x: x[0], resultList))
-    trueText = list(map(lambda x: x[1], resultList))
+def compare(resultList: List[str]) -> float:
+    predictedText, trueText = zip(*resultList)
+    predictedText, trueText = list(predictedText), list(trueText)
     score = wer.compute(predictions=predictedText, references=trueText)
     return score
 
 
-# def array_into_file(audio_array, sr):
-#     # Create temporary wav file
-#     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-#         sf.write(tmp.name, audio_array, sr)
-#         tmp_path = tmp.name
-#     return tmp_path
-#
+def evaluate_on_dataset(transcribe: Callable[[str], :str], datasetName, streaming: bool) -> float:
+    preparedDataset = prepare_dataset(datasetName, streaming)
+    processText = (lambda x: x) if datasetName not in datasetFormatingFunction else datasetFormatingFunction[
+        datasetName]
 
-def evaluate_on_dataset(transcribe, datasetName):
-    preparedDataset = prepare_dataset(datasetName)
-    global cnt
-    cnt = 0
+    counter = Counter()
 
     def f(x):
-        global cnt
-        cnt += 1
-        # if cnt % 10 == 0:
-        print(cnt)
-        aud = x[0]['path']
-        transcript = x[1]
-        return transcribe(aud), transcript
+        counter.inc()
+        audio_path = x[0]['path']
+        print(audio_path)
+        # if not re.search(r"\.cache", audio_path): audio_path = ""
+        predictedText = processText(transcribe(audio_path))
+        trueText = x[1]
+        return predictedText, trueText
 
     processedDataset = map(f, preparedDataset)
     accuracy = compare(processedDataset)
     return accuracy
 
 
-def evaluate(transcribe):
+def evaluate(transcribe: Callable[[str], str], streaming=False) -> None:
     for datasetName in availableDatasets:
-        accuracy = evaluate_on_dataset(transcribe, datasetName)
+        accuracy = evaluate_on_dataset(transcribe, datasetName, streaming)
         print("WER on", datasetName, ":", accuracy)
 
 

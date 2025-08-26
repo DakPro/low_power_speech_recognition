@@ -5,14 +5,14 @@ import subprocess
 LOCAL_PATH = Path(__file__).parent.joinpath("src")
 
 
-def preheat():
+def preheat() -> None:
     OLD_PATH = os.getcwd()
     os.chdir(LOCAL_PATH)
     subprocess.run(args=[], executable=f"{LOCAL_PATH}/prepare.sh", stdout=subprocess.DEVNULL)
     os.chdir(OLD_PATH)
 
 
-def transcribe(audio, model="base"):
+def transcribe(audio: str, model="base") -> str:
     if isinstance(audio, (str, Path)):
         OLD_PATH = os.getcwd()
         os.chdir(LOCAL_PATH)
@@ -29,6 +29,3 @@ def transcribe(audio, model="base"):
 
 
 preheat()
-
-if __name__ == "__main__":
-    pass

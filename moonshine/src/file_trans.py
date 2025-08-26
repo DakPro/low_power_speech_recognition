@@ -1,22 +1,19 @@
 from pathlib import Path
 
 import numpy
-import tokenizers
+from tokenizers import Tokenizer
 from .model import MoonshineOnnxModel
 
 from . import ASSETS_DIR
 
 
-def load_audio(audio):
-    if isinstance(audio, (str, Path)):
-        import librosa
-        audio, _ = librosa.load(audio, sr=16_000)
-        return audio[None, ...]
-    else:
-        raise Exception("Invalid audio type: ", str(type(audio)))
+def load_audio(audio: str | Path) -> numpy.ndarray:
+    import librosa
+    audio, _ = librosa.load(audio, sr=16_000)
+    return audio[None, ...]
 
 
-def assert_audio_size(audio):
+def assert_audio_size(audio: numpy.ndarray) -> float:
     assert len(audio.shape) == 2, "audio should be of shape [batch, samples]"
     num_seconds = audio.size / 16000
     assert 0.1 < num_seconds < 64, (
@@ -26,17 +23,16 @@ def assert_audio_size(audio):
     return num_seconds
 
 
-def load_tokenizer():
+def load_tokenizer() -> Tokenizer:
     tokenizer_file = ASSETS_DIR / "tokenizer.json"
-    tokenizer = tokenizers.Tokenizer.from_file(str(tokenizer_file))
-    return tokenizer
+    return Tokenizer.from_file(str(tokenizer_file))
 
 
 models = {}
 tokenizer = load_tokenizer()
 
 
-def transcribe(audio, model_name="moonshine/base"):
+def transcribe(audio: str, model_name: str = "moonshine/base") -> str:
     try:
         model = models[model_name]
     except KeyError as e:
@@ -51,19 +47,13 @@ def transcribe(audio, model_name="moonshine/base"):
 
     tokens = model.generate(audio)
     ans = tokenizer.decode_batch(tokens)
-    if ans is not None:
-        ans = ans[0]  # keeping the desired format
+    ans = '' if ans is None else ans[0]  # keeping the desired format
     return ans
 
 
-def benchmark(audio, model="moonshine/base"):
+def benchmark(audio: str, model: str = "moonshine/base") -> None:
     import time
-
-    if isinstance(model, str):
-        model = MoonshineOnnxModel(model_name=model)
-    assert isinstance(model, MoonshineOnnxModel), (
-        f"Expected a MoonshineOnnxModel model or a model name, not a {type(model)}"
-    )
+    model = MoonshineOnnxModel(model_name=model)
 
     audio = load_audio(audio)
     num_seconds = assert_audio_size(audio)

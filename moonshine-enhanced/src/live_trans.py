@@ -144,7 +144,7 @@ def main(model_name="moonshine/base", dev_info=False, print_transcription=False)
 
                 speech_dict = vad_iterator(chunk)
                 if speech_dict:
-                    if "start.sh" in speech_dict and not recording:
+                    if "start" in speech_dict and not recording:
                         recording = True
                         start_time = time.time()
 

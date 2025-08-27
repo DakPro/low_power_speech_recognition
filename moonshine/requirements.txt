@@ -18,11 +18,3 @@ sounddevice~=0.5.2
 fastrtc>=0.0.6
 useful-moonshine-onnx@git+https://git@github.com/usefulsensors/moonshine.git#subdirectory=moonshine-onnx
 numba
-
-# evaluation
-torch
-transformers
-evaluate
-normalizer
-tqdm
-datasets~=3.6.0

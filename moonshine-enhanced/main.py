@@ -1,3 +1,5 @@
-from src.live_trans import main
+from src.live_trans import TranscriptionProcess
 
-main(dev_info=True, print_transcription=True)
+process = TranscriptionProcess()
+process.start(print_transcriptions=True)
+print("Process ended")

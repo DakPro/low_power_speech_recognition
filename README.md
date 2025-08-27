@@ -8,6 +8,14 @@ To test real-time transcription from mic: <code>python3
 transcription_from_mic.py</code>. This will run moonshine model by default.
 For more details access READMEs in directories corresponding to models.
 
+## Self-running application for Linux
+
+The directory <code>moonshine-enhanced</code> contains code for application on linux that:
+
+* starts up automatically on OS setup
+* continuously listens to speech
+* transcribes the speech and thus executes commands depending on the speech
+
 ## Evaluation on datasets
 
 To evaluate models performance, run

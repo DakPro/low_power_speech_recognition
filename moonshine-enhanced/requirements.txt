@@ -1,0 +1,5 @@
+numba
+numpy
+silero-vad
+useful-moonshine-onnx@git+https://git@github.com/usefulsensors/moonshine.git#subdirectory=moonshine-onnx
+sounddevice

@@ -15,7 +15,7 @@ if __name__ == '__main__':
     parser.add_argument('--wer', action='store_true', help='flag whether to evaluate WER')
     parser.add_argument('--all', action='store_true', help='flag whether to evaluate WER and ___ (TODO);'
                                                            'if used, --wer and other such flags have no effect')
-
+    parser.add_argument('-t', '--threads', type=int, help='number of threads')
     parser.add_argument('-s', '--streaming', action='store_true', help='flag whether to use streaming'
                                                                        'on WER evaluation')
 
@@ -47,4 +47,4 @@ if __name__ == '__main__':
 
     # noinspection PyUnboundLocalVariable
     if f_wer:
-        WER.evaluate(transcribe, streaming=args.streaming)
+        WER.evaluate(transcribe, streaming=args.streaming, threads=args.threads)

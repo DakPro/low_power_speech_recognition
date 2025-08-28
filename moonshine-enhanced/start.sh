@@ -1,7 +1,7 @@
 #!/bin/bash
 
 DIR="$HOME/moonshine-enhanced"
-if [ ! -d "$DIR/.env" ]; then
+if [ ! -d "$DIR/.venv" ]; then
   uv venv
 fi
 source "$DIR/.venv/bin/activate"

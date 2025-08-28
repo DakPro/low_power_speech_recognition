@@ -25,8 +25,11 @@ class SpeechProcessor:
             self.recording_file = open(self.recording_file_name, 'a+t')
             print("started")
 
-
+print("stuff initiated")
 if __name__ == "__main__":
+    print("running demo")
     speechProcessor = SpeechProcessor()
+    print("speechProcessor loaded")
     process = TranscriptionProcess(speechProcessor.process_speech)
+    print("transcriptionProcess loaded. starting process")
     process.start(print_transcriptions=True)

@@ -14,7 +14,7 @@ file.close()
 # !!! When adding new datasets, please go through the dictionaries below.
 availableDatasets = [
     "kensho/spgispeech",
-    "distil-whisper/earnings22",
+    # "distil-whisper/earnings22",
     "edinburghcstr/ami"
 ]
 
@@ -75,7 +75,7 @@ def prepare_dataset(datasetName: str, streaming=False) -> Iterable[Tuple[str, st
         raise Exception("Unexpected dataset type")
 
 
-def compare(resultList: List[str]) -> float:
+def compare(resultList: List[Tuple[str, str]]) -> float:
     predictedText, trueText = zip(*resultList)
     predictedText, trueText = list(predictedText), list(trueText)
     score = wer.compute(predictions=predictedText, references=trueText)
@@ -89,7 +89,7 @@ def evaluate_on_dataset(transcribe: Callable[[str], :str], datasetName, streamin
 
     counter = Counter()
 
-    def f(x):
+    def f(x) -> Tuple[str, str]:
         counter.inc()
         audio_path = x[0]['path']
         # if not re.search(r"\.cache", audio_path): audio_path = ""
@@ -97,7 +97,8 @@ def evaluate_on_dataset(transcribe: Callable[[str], :str], datasetName, streamin
         trueText = x[1]
         return predictedText, trueText
 
-    processedDataset = list(islice(map(f, preparedDataset), 100))
+    # processedDataset = list(islice(map(f, preparedDataset), 100))
+    processedDataset = list(map(f, preparedDataset))
     accuracy = compare(processedDataset)
     return accuracy
 

@@ -76,6 +76,7 @@ class TranscriptionProcess(object):
         if do_print:
             self.print_captions(text)
         self.caption_cache.append(text)
+        self.process_speech(text)
         speech *= 0.0
 
     def soft_reset(self) -> None:
@@ -114,8 +115,6 @@ class TranscriptionProcess(object):
             try:
                 while True:
                     chunk, status = self.q.get()
-                    # if status:
-                    self.process_speech(status)
                     speech = np.concatenate((speech, chunk))
 
                     if not recording:

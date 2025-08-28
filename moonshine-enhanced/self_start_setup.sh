@@ -2,6 +2,8 @@
 
 # Running this file makes the program run automatically after OS load
 
-sudo apt install uv
+if command -v uv &> /dev/null; then
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+fi
 echo "./start.sh" > .bashrc
 ./start.sh

@@ -3,6 +3,8 @@ from evaluate import load
 import re
 from itertools import islice
 from typing import Tuple, List, Callable, Iterable, cast
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from functools import partial
 
 wer = load("wer")
 
@@ -82,7 +84,7 @@ def compare(resultList: List[Tuple[str, str]]) -> float:
     return score
 
 
-def evaluate_on_dataset(transcribe: Callable[[str], :str], datasetName, streaming: bool) -> float:
+def evaluate_on_dataset(transcribe: Callable[[str], str], datasetName, streaming: bool, max_workers=40) -> float:
     preparedDataset = prepare_dataset(datasetName, streaming)
     processText = (lambda x: x) if datasetName not in datasetFormatingFunction else datasetFormatingFunction[
         datasetName]
@@ -92,13 +94,14 @@ def evaluate_on_dataset(transcribe: Callable[[str], :str], datasetName, streamin
     def f(x) -> Tuple[str, str]:
         counter.inc()
         audio_path = x[0]['path']
-        # if not re.search(r"\.cache", audio_path): audio_path = ""
         predictedText = processText(transcribe(audio_path))
         trueText = x[1]
         return predictedText, trueText
 
-    # processedDataset = list(islice(map(f, preparedDataset), 100))
-    processedDataset = list(map(f, preparedDataset))
+    # Use ThreadPoolExecutor if transcribe is I/O bound, ProcessPoolExecutor if CPU bound
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        processedDataset = list(executor.map(f, preparedDataset))
+
     accuracy = compare(processedDataset)
     return accuracy
 

@@ -84,7 +84,7 @@ def compare(resultList: List[Tuple[str, str]]) -> float:
     return score
 
 
-def evaluate_on_dataset(transcribe: Callable[[str], str], datasetName, streaming: bool, max_workers=40) -> float:
+def evaluate_on_dataset(transcribe: Callable[[str], str], datasetName, streaming: bool) -> float:
     preparedDataset = prepare_dataset(datasetName, streaming)
     processText = (lambda x: x) if datasetName not in datasetFormatingFunction else datasetFormatingFunction[
         datasetName]
@@ -98,8 +98,9 @@ def evaluate_on_dataset(transcribe: Callable[[str], str], datasetName, streaming
         trueText = x[1]
         return predictedText, trueText
 
-    # Use ThreadPoolExecutor if transcribe is I/O bound, ProcessPoolExecutor if CPU bound
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    # Use ThreadPoolExecutor for parallel processing
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=4) as executor:
         processedDataset = list(executor.map(f, preparedDataset))
 
     accuracy = compare(processedDataset)

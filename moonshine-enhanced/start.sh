@@ -5,8 +5,9 @@ if [ ! -d "$DIR/.env" ]; then
   uv venv
 fi
 source "$DIR/.venv/bin/activate"
-if [ -n "$(uv sync --dry-run)" ]; then
-  uv pip install -r DIR/requirements.txt
+uv pip install -r requirements.txt --dry-run --no-index
+if [ $? -eq 1 ]; then
+  uv pip install -r requirements.txt
 fi
 uv run "$DIR/main.py"
 

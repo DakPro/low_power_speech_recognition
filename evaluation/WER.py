@@ -1,10 +1,7 @@
-import os
-
-import datasets
 from datasets import load_dataset, Audio, Dataset, IterableDataset
 from evaluate import load
 import re
-import functools
+from itertools import islice
 from typing import Tuple, List, Callable, Iterable, cast
 
 wer = load("wer")
@@ -24,8 +21,7 @@ availableDatasets = [
 # Parameters for loading datasets from datasets library
 datasetParams = {
     "kensho/spgispeech": {"name": "test", "token": huggingface_access_token, "split": "test",
-                          "trust_remote_code": True,
-                          "streaming": True},
+                          "trust_remote_code": True},
     "distil-whisper/earnings22": {"name": "chunked", "split": "test"},
     "edinburghcstr/ami": {"name": "ihm", "split": "test", "trust_remote_code": True}
 }
@@ -34,9 +30,8 @@ datasetParams = {
 # By default: 'audio' for audio and 'transcript' for transcription
 # !!! Please specify in the dictionary below if columns names differ
 datasetColumnNames = {
-    # "kensho/spgispeech": {'transcript'},
     "distil-whisper/earnings22": {'transcript': 'transcription'},
-    "edinburghcstr/ami": {'transcription': 'text'}
+    "edinburghcstr/ami": {'transcript': 'text'}
 }
 
 # Some datasets have unconventional format of transcripts
@@ -58,10 +53,10 @@ class Counter:
 
 
 def prepare_dataset(datasetName: str, streaming=False) -> Iterable[Tuple[str, str]]:
-    specialNames = datasetColumnNames[datasetName]
+    specialNames = datasetColumnNames[datasetName] if datasetName in datasetColumnNames else dict()
 
     print(f"Loading {datasetName} dataset...", end='')
-    dataset = load_dataset(datasetName, **datasetParams[datasetName])
+    dataset = load_dataset(datasetName, **datasetParams[datasetName], streaming=streaming)
     print("Loaded.")
 
     dataset = dataset.rename_columns({specialNames[i]: i for i in specialNames})
@@ -71,11 +66,9 @@ def prepare_dataset(datasetName: str, streaming=False) -> Iterable[Tuple[str, st
 
     print(dataset)
     if isinstance(dataset, Dataset):
-        pass
         return map(lambda x: (x['audio'], x['transcript']), dataset)
 
     elif isinstance(dataset, IterableDataset):
-        pass
         return map(lambda x: (x['audio'], x['transcript']), dataset)
 
     else:
@@ -99,13 +92,12 @@ def evaluate_on_dataset(transcribe: Callable[[str], :str], datasetName, streamin
     def f(x):
         counter.inc()
         audio_path = x[0]['path']
-        print(audio_path)
         # if not re.search(r"\.cache", audio_path): audio_path = ""
         predictedText = processText(transcribe(audio_path))
         trueText = x[1]
         return predictedText, trueText
 
-    processedDataset = map(f, preparedDataset)
+    processedDataset = list(islice(map(f, preparedDataset), 100))
     accuracy = compare(processedDataset)
     return accuracy
 

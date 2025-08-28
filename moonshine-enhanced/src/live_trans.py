@@ -92,10 +92,8 @@ class TranscriptionProcess(object):
                 text = caption + " " + text
                 if len(text) > MAX_LINE_LENGTH:
                     break
-        if len(text) > MAX_LINE_LENGTH:
-            text = text[-MAX_LINE_LENGTH:]
-        else:
-            text = " " * (MAX_LINE_LENGTH - len(text)) + text
+        text = (text[-MAX_LINE_LENGTH:]) if len(text) > MAX_LINE_LENGTH else (
+                    " " * (MAX_LINE_LENGTH - len(text)) + text)
         print("\r" + (" " * MAX_LINE_LENGTH) + "\r" + text, end="", flush=True)
 
     def start(self, print_transcriptions: bool = False) -> None:

@@ -6,6 +6,6 @@ if ! command -v uv &> /dev/null; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
 fi
 echo "uv installed"
-echo "./moonshine-enhanced/start.sh" >> .bashrc
+echo "./moonshine-enhanced/start.sh" >> "$HOME/.bashrc"
 echo "start command appended"
 ./start.sh

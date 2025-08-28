@@ -1,5 +1,6 @@
 import time
 from queue import Queue
+from typing import Callable
 
 import numpy as np
 from silero_vad import VADIterator, load_silero_vad
@@ -49,7 +50,7 @@ class Transcriber(object):
 
 
 class TranscriptionProcess(object):
-    def __init__(self):
+    def __init__(self, process_speech: Callable[[str | None], None]):
 
         self.transcribe = Transcriber(model_name=MODEL, rate=SAMPLING_RATE)
         self.vad_iterator = VADIterator(
@@ -60,6 +61,7 @@ class TranscriptionProcess(object):
         )
         self.q = Queue()
         self.caption_cache = []
+        self.process_speech = process_speech
 
         def input_callback(data, frames, time, status) -> None:
             if status:
@@ -113,7 +115,7 @@ class TranscriptionProcess(object):
                 while True:
                     chunk, status = self.q.get()
                     # if status:
-                    #     process_speech(status)
+                    self.process_speech(status)
                     speech = np.concatenate((speech, chunk))
 
                     if not recording:

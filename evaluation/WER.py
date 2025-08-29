@@ -43,6 +43,10 @@ datasetFormatingFunction = {
                                              re.sub(r"\s+", " ", re.sub(r"([.,!?])", r" \1 ", text.upper()))).strip()
 }
 
+rows_cnt = {
+    "kensho/spgispeech": 39341
+}
+
 
 class Counter:
     def __init__(self):
@@ -90,10 +94,16 @@ def evaluate_on_dataset(transcribe: Callable[[str], str], datasetName, streaming
         datasetName]
 
     counter = Counter()
+    cnt = rows_cnt[datasetName]
 
     def f(x) -> Tuple[str, str]:
         counter.inc()
         audio_path = x[0]['path']
+        if audio_path is None:
+            print("COUNT:", counter.count)
+            print(x)
+            print("I don't know why this stuff is here")
+            return "", ""
         predictedText = processText(transcribe(audio_path))
         trueText = x[1]
         return predictedText, trueText

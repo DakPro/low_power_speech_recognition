@@ -32,7 +32,7 @@ models = {}
 tokenizer = load_tokenizer()
 
 
-def transcribe(audio: str, model_name: str = "moonshine/base") -> str:
+def transcribe(audio: str | numpy.ndarray, model_name: str = "moonshine/base") -> str:
     try:
         model = models[model_name]
     except KeyError as e:
@@ -42,7 +42,7 @@ def transcribe(audio: str, model_name: str = "moonshine/base") -> str:
             raise Exception(f"Expected a model name, not a {type(model_name)}")
         models[model_name] = model
 
-    audio = load_audio(audio)
+    audio = audio if isinstance(audio, numpy.ndarray) else load_audio(audio)
     assert_audio_size(audio)
 
     tokens = model.generate(audio)
@@ -50,26 +50,3 @@ def transcribe(audio: str, model_name: str = "moonshine/base") -> str:
     ans = '' if ans is None else ans[0]  # keeping the desired format
     return ans
 
-
-def benchmark(audio: str, model: str = "moonshine/base") -> None:
-    import time
-    model = MoonshineOnnxModel(model_name=model)
-
-    audio = load_audio(audio)
-    num_seconds = assert_audio_size(audio)
-
-    print("Warming up...")
-    for _ in range(4):
-        _ = model.generate(audio)
-
-    print("Benchmarking...")
-    N = 8
-    start_time = time.time_ns()
-    for _ in range(N):
-        _ = model.generate(audio)
-    end_time = time.time_ns()
-
-    elapsed_time = (end_time - start_time) / N
-    elapsed_time /= 1e6
-
-    print(f"Time to transcribe {num_seconds:.2f}s of speech is {elapsed_time:.2f}ms")

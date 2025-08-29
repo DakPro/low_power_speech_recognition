@@ -99,12 +99,7 @@ def evaluate_on_dataset(transcribe: Callable[[str], str], datasetName, streaming
     def f(x) -> Tuple[str, str]:
         counter.inc()
         audio_path = x[0]['path']
-        if audio_path is None:
-            print("COUNT:", counter.count)
-            print(x)
-            print("I don't know why this stuff is here")
-            return "", ""
-        predictedText = processText(transcribe(audio_path))
+        predictedText = processText(transcribe(audio_path)) if audio_path is not None else x[0]['array']
         trueText = x[1]
         return predictedText, trueText
 

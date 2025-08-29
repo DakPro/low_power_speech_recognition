@@ -6,7 +6,6 @@ ASSETS_DIR = Path(__file__).parents[0] / "assets"
 from .model import MoonshineOnnxModel
 from .file_trans import (
     transcribe,
-    benchmark,
     load_tokenizer,
     load_audio,
 )

@@ -81,7 +81,7 @@ def prepare_iter(datasetName: str) -> IterableDataset:
                              load_dataset(datasetName, **datasetParams[datasetName], streaming=True))
     return dataset
 
-d
+
 def evaluate_on_iter(transcribe: Callable[[str | numpy.ndarray], str], datasetName: str, threads: int) -> float:
     preparedDataset = prepare_iter(datasetName)
     processText = (lambda x: x) if datasetName not in datasetFormatingFunction else datasetFormatingFunction[

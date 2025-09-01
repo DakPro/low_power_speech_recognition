@@ -1,10 +1,9 @@
+import numpy
 from datasets import load_dataset, Audio, Dataset, IterableDataset
 from evaluate import load
 import re
-from itertools import islice
 from typing import Tuple, List, Callable, Iterable, cast
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from functools import partial
 
 wer = load("wer")
 
@@ -58,67 +57,82 @@ class Counter:
             print(self.count)
 
 
-def prepare_dataset(datasetName: str, streaming=False) -> Iterable[Tuple[str, str]]:
+def format_dataset(datasetName: str, dataset: Dataset | Iterable) -> Dataset | IterableDataset:
     specialNames = datasetColumnNames[datasetName] if datasetName in datasetColumnNames else dict()
-
-    print(f"Loading {datasetName} dataset...", end='')
-    dataset = load_dataset(datasetName, **datasetParams[datasetName], streaming=streaming)
-    print("Loaded.")
-
-    dataset = dataset.rename_columns({specialNames[i]: i for i in specialNames})
-    dataset.remove_columns(list(set(dataset.column_names) - {'audio', 'transcript'}))
+    dataset = (dataset.rename_columns({specialNames[i]: i for i in specialNames})
+               .remove_columns(list(set(dataset.column_names) - {'audio', 'transcript'})))
     if dataset.features['audio'].sampling_rate != 16000:
         dataset.cast_column('audio', Audio(sampling_rate=16000))
+    return dataset
 
-    print(dataset)
-    if isinstance(dataset, Dataset):
-        return map(lambda x: (x['audio'], x['transcript']), dataset)
 
-    elif isinstance(dataset, IterableDataset):
-        return map(lambda x: (x['audio'], x['transcript']), dataset)
+def prepare_slice(datasetName: str, start: int | None, end: int | None) -> Dataset:
+    dataset = format_dataset(datasetName, load_dataset(datasetName, **datasetParams[datasetName]))
+    datasetSlice = dataset[start:end]
+    # Possible: return LIST OF TUPLES or even TUPLE OF LISTS instead of database object
+    return datasetSlice
 
-    else:
-        raise Exception("Unexpected dataset type")
+
+def prepare_iter(datasetName: str) -> IterableDataset:
+    dataset = format_dataset(datasetName,
+                             load_dataset(datasetName, **datasetParams[datasetName], streaming=True))
+
+    return dataset
 
 
 def compare(resultList: List[Tuple[str, str]]) -> float:
     predictedText, trueText = zip(*resultList)
     predictedText, trueText = list(predictedText), list(trueText)
+    print("-----------------------")
+    print("Types of given results lists")
+    print("Predicted:       string      string")
+    print("Given:           ", type(predictedText[0]), "    ", type(trueText[0]))
+    print("-----------------------")
     score = wer.compute(predictions=predictedText, references=trueText)
     return score
 
 
-def evaluate_on_dataset(transcribe: Callable[[str], str], datasetName, streaming: bool, threads: int) -> float:
-    preparedDataset = prepare_dataset(datasetName, streaming)
+def evaluate_on_iter(transcribe: Callable[[str | numpy.ndarray], str], datasetName: str, threads: int) -> float:
+    preparedDataset = prepare_iter(datasetName)
     processText = (lambda x: x) if datasetName not in datasetFormatingFunction else datasetFormatingFunction[
         datasetName]
 
     counter = Counter()
-    cnt = rows_cnt[datasetName]
 
     def f(x) -> Tuple[str, str]:
         counter.inc()
-        audio_path = x[0]['path']
-        predictedText = processText(transcribe(audio_path)) if audio_path is not None else x[0]['array']
-        trueText = x[1]
-        return predictedText, trueText
+        return processText(transcribe(x['audio']['array'])), x['transcript']
 
-    # Use ThreadPoolExecutor for parallel processing
-    from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=threads) as executor:
-        processedDataset = list(executor.map(f, preparedDataset))
+        result = list(executor.map(f, preparedDataset))
 
-    accuracy = compare(processedDataset)
-    return accuracy
+    return compare(result)
 
 
-def evaluate(transcribe: Callable[[str], str], streaming=False, threads:int = 4) -> None:
+def evaluate_on_slice(transcribe: Callable[[str], str], datasetName: str,
+                      threads: int = 4, start: int | None = None, end: int | None = None) -> float:
+    datasetSlice = prepare_slice(datasetName, start, end)
+    print(type(datasetSlice))
+    processText = (lambda x: x) if datasetName not in datasetFormatingFunction else datasetFormatingFunction[
+        datasetName]
+
+    def f(x):
+        return processText(transcribe(x['audio']['path'])), x['transcript']
+
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        result = list(executor.map(f, datasetSlice))
+
+    return compare(result)
+
+
+def evaluate(transcribe: Callable[[str | numpy.ndarray], str], streaming=False, threads: int = 4) -> None:
     for datasetName in availableDatasets:
-        accuracy = evaluate_on_dataset(transcribe, datasetName, streaming, threads)
+        accuracy = evaluate_on_iter(transcribe, datasetName, threads) if streaming \
+            else evaluate_on_slice(transcribe, datasetName, threads)
         print("WER on", datasetName, ":", accuracy)
 
 
 if __name__ == "__main__":
-    from moonshine.src.file_trans import transcribe as trans
+    from moonshine.src.file_trans import transcribe as tr
 
-    evaluate(trans)
+    evaluate_on_slice(tr, "kensho/spgispeech", 0, 1)

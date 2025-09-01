@@ -57,7 +57,8 @@ class Counter:
 
     def inc(self) -> None:
         self.count += 1
-        print(self.count)
+        if self.count % 10 == 1:
+            print(self.count)
 
 
 def format_dataset(datasetName: str, dataset: Dataset | Iterable) -> Dataset | IterableDataset:

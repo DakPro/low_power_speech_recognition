@@ -139,4 +139,4 @@ def evaluate(transcribe: Callable[[str | numpy.ndarray], str], streaming=False, 
 if __name__ == "__main__":
     from moonshine.src.file_trans import transcribe as tr
 
-    evaluate_on_slice(tr, "kensho/spgispeech", 0, 1)
+    evaluate_on_slice(tr, "kensho/spgispeech", 4, 1)

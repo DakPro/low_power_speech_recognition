@@ -4,6 +4,10 @@ from evaluate import load
 import re
 from typing import Tuple, List, Callable, Iterable, cast
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+import os,sys
+
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(parent_dir)
 
 wer = load("wer")
 

@@ -57,8 +57,7 @@ class Counter:
 
     def inc(self) -> None:
         self.count += 1
-        if self.count % 10 == 0:
-            print(self.count)
+        print(self.count)
 
 
 def format_dataset(datasetName: str, dataset: Dataset | Iterable) -> Dataset | IterableDataset:
@@ -80,22 +79,9 @@ def prepare_slice(datasetName: str, start: int | None, end: int | None) -> Datas
 def prepare_iter(datasetName: str) -> IterableDataset:
     dataset = format_dataset(datasetName,
                              load_dataset(datasetName, **datasetParams[datasetName], streaming=True))
-
     return dataset
 
-
-def compare(resultList: List[Tuple[str, str]]) -> float:
-    predictedText, trueText = zip(*resultList)
-    predictedText, trueText = list(predictedText), list(trueText)
-    print("-----------------------")
-    print("Types of given results lists")
-    print("Predicted:       string      string")
-    print("Given:           ", type(predictedText[0]), "    ", type(trueText[0]))
-    print("-----------------------")
-    score = wer.compute(predictions=predictedText, references=trueText)
-    return score
-
-
+d
 def evaluate_on_iter(transcribe: Callable[[str | numpy.ndarray], str], datasetName: str, threads: int) -> float:
     preparedDataset = prepare_iter(datasetName)
     processText = (lambda x: x) if datasetName not in datasetFormatingFunction else datasetFormatingFunction[
@@ -110,7 +96,8 @@ def evaluate_on_iter(transcribe: Callable[[str | numpy.ndarray], str], datasetNa
     with ThreadPoolExecutor(max_workers=threads) as executor:
         result = list(executor.map(f, preparedDataset))
 
-    return compare(result)
+    predictedTranscript, trueTranscript = zip(*result)
+    return wer.compute(predictions=predictedTranscript, references=trueTranscript)
 
 
 def evaluate_on_slice(transcribe: Callable[[str], str], datasetName: str,
@@ -120,13 +107,10 @@ def evaluate_on_slice(transcribe: Callable[[str], str], datasetName: str,
     processText = (lambda x: x) if datasetName not in datasetFormatingFunction else datasetFormatingFunction[
         datasetName]
 
-    def f(x):
-        return processText(transcribe(x['audio']['path'])), x['transcript']
-
     with ThreadPoolExecutor(max_workers=threads) as executor:
-        result = list(executor.map(f, datasetSlice))
-
-    return compare(result)
+        predictedTranscriptions = list(executor.map(lambda x: processText(transcribe(x['path'])),
+                                                    datasetSlice['audio']))
+    return wer.compute(predictions=predictedTranscriptions, references=datasetSlice['transcript'])
 
 
 def evaluate(transcribe: Callable[[str | numpy.ndarray], str], streaming=False, threads: int = 4) -> None:

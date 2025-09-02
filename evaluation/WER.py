@@ -113,9 +113,9 @@ def evaluate_on_slice(transcribe: Callable[[str], str], datasetName: str,
     def f(x):
         counter.inc()
         return processText(transcribe(x['path']))
-    
+
     with ThreadPoolExecutor(max_workers=threads) as executor:
-        predictedTranscriptions = list(executor.map(f, datasetSlice['transcript']))
+        predictedTranscriptions = list(executor.map(f, datasetSlice['audio']))
     return wer.compute(predictions=predictedTranscriptions, references=datasetSlice['transcript'])
 
 

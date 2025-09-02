@@ -106,13 +106,16 @@ def evaluate_on_iter(transcribe: Callable[[str | numpy.ndarray], str], datasetNa
 def evaluate_on_slice(transcribe: Callable[[str], str], datasetName: str,
                       threads: int = 4, start: int | None = None, end: int | None = None) -> float:
     datasetSlice = prepare_slice(datasetName, start, end)
-    print(type(datasetSlice))
+    counter = Counter()
     processText = (lambda x: x) if datasetName not in datasetFormatingFunction else datasetFormatingFunction[
         datasetName]
 
+    def f(x):
+        counter.inc()
+        return processText(transcribe(x['path']))
+    
     with ThreadPoolExecutor(max_workers=threads) as executor:
-        predictedTranscriptions = list(executor.map(lambda x: processText(transcribe(x['path'])),
-                                                    datasetSlice['audio']))
+        predictedTranscriptions = list(executor.map(f, datasetSlice['transcript']))
     return wer.compute(predictions=predictedTranscriptions, references=datasetSlice['transcript'])
 
 

@@ -4,7 +4,7 @@ from evaluate import load
 import re
 from typing import Tuple, List, Callable, Iterable, cast
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-import os,sys
+import os, sys
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
@@ -92,6 +92,8 @@ def evaluate_on_iter(transcribe: Callable[[str | numpy.ndarray], str], datasetNa
 
     def f(x) -> Tuple[str, str]:
         counter.inc()
+        if x is None:
+            return "", ""
         return processText(transcribe(x['audio']['array'])), x['transcript']
 
     with ThreadPoolExecutor(max_workers=threads) as executor:

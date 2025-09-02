@@ -2,7 +2,7 @@ import numpy
 from datasets import load_dataset, Audio, Dataset, IterableDataset
 from evaluate import load
 import re
-from typing import Tuple, List, Callable, Iterable, cast
+from typing import Tuple, List, Callable, Iterable, cast, Dict
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 import os, sys
 
@@ -90,7 +90,7 @@ def evaluate_on_iter(transcribe: Callable[[str | numpy.ndarray], str], datasetNa
 
     counter = Counter()
 
-    def f(x) -> Tuple[str, str]:
+    def f(x: Dict[str, Dict[str, str | numpy.ndarray] | str]) -> Tuple[str, str]:
         counter.inc()
         if x is None:
             return "", ""
@@ -110,7 +110,7 @@ def evaluate_on_slice(transcribe: Callable[[str], str], datasetName: str,
     processText = (lambda x: x) if datasetName not in datasetFormatingFunction else datasetFormatingFunction[
         datasetName]
 
-    def f(x):
+    def f(x: Dict[str, str]) -> str:
         counter.inc()
         return processText(transcribe(x['path']))
 

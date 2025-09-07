@@ -11,6 +11,3 @@ cmake -B "$ROOT_DIR/build" -S "$ROOT_DIR" -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
 
 # Build
 cmake --build "$ROOT_DIR/build"
-
-# Install to current directory
-cmake --install "$ROOT_DIR/build" --prefix "$ROOT_DIR/dist"

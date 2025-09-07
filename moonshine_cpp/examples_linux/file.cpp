@@ -5,10 +5,11 @@
 #include <iostream>
 #include <vector>
 #include <chrono>
+#include <sstream>
 
 #include <sndfile.h>
 
-
+const unsigned long long SAMPLE_RATE = 16000;
 
 std::vector<float> readWavFile(const std::string &filename){
     SF_INFO sfinfo;
@@ -18,14 +19,9 @@ std::vector<float> readWavFile(const std::string &filename){
         throw std::runtime_error("Error opening file");
     }
 
-//    std::cerr << "Frames: " << sfinfo.frames << std::endl;
-//    std::cerr << "Sample rate: " << sfinfo.samplerate << std::endl;
-//    std::cerr << "Channels: " << sfinfo.channels << std::endl;
 
-    // Read audio data
     std::vector<float> buffer(sfinfo.frames * sfinfo.channels);
     sf_readf_float(file, buffer.data(), sfinfo.frames);
-
     sf_close(file);
     return buffer;
 }
@@ -33,10 +29,20 @@ std::vector<float> readWavFile(const std::string &filename){
 std::string transcribe(MoonshineModel &model, std::vector<float> &audio_samples){
     try
     {
-        auto tokens = model.generate(audio_samples);
-        std::string result = model.detokenize(tokens);
-        std::cout << "Detokenized: " << result << "\n";
-        return result;
+        std::ostringstream ans;
+        unsigned long long length = audio_samples.size();
+        for(unsigned long long i=0; i<length; i+=SAMPLE_RATE*30)
+        {
+            std::vector audio_sample(audio_samples.begin()+i,
+                                     audio_samples.begin()+std::min(i+SAMPLE_RATE*30, length));
+            auto tokens = model.generate(audio_sample);
+            std::string result = model.detokenize(tokens);
+            result.erase(0,3);
+            result.erase(result.end()-4,result.end());
+        }
+        std::string ans_str = ans.str();
+        std::cout << ans_str;
+        return ans_str;
     }
     catch (const Ort::Exception &e) {
         throw std::runtime_error("ONNX Runtime error: "+std::string(e.what()) + "\n");

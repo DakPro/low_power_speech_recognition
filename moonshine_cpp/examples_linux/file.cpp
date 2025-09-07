@@ -31,6 +31,7 @@ std::string transcribe(MoonshineModel &model, std::vector<float> &audio_samples)
     {
         std::ostringstream ans;
         unsigned long long length = audio_samples.size();
+        auto start = std::chrono::high_resolution_clock::now();
         for(unsigned long long i=0; i<length; i+=SAMPLE_RATE*30)
         {
             std::vector audio_sample(audio_samples.begin()+i,
@@ -41,7 +42,10 @@ std::string transcribe(MoonshineModel &model, std::vector<float> &audio_samples)
             result.erase(result.end()-4,result.end());
         }
         std::string ans_str = ans.str();
-        std::cout << ans_str;
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> duration = end - start;
+        std::cout << "Time it took to transcribe: " << duration.count() << '\n';
+        std::cout << "Transcript:\n" << ans_str << '\n';
         return ans_str;
     }
     catch (const Ort::Exception &e) {
@@ -62,6 +66,8 @@ int main(int argc, char *argv[])
     // Load audio
     auto audio_samples = readWavFile(argv[1]);
     // Load model
+    std::cout << "Initializing model\n";
     MoonshineModel model(argc==3?argv[1]:"model/base");
+    std::cout << "Model initialized\n";
     transcribe(model, audio_samples);
 }

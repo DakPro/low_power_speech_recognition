@@ -9,7 +9,6 @@
 #include <atomic>
 #include "alt_conio.hpp"
 #include <csignal> // Required for signal handling
-#include <onnxruntime_cxx_api.h>
 
 std::atomic<bool> running(true);
 
@@ -39,17 +38,6 @@ void listAudioDevices(){
 }
 
 int main(int argc, char* argv[]){
-    Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "moonshine");
-
-    Ort::SessionOptions session_options;
-    session_options.SetIntraOpNumThreads(4);
-
-    // Inter-op threads: number of ops that can run in parallel
-    session_options.SetInterOpNumThreads(4);
-    session_options.SetExecutionMode(ORT_PARALLEL);
-    session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-
-
     std::cout << "Moonshine Live Transcription\n";
     SDL_SetMainReady();  // Tell SDL we'll handle the main entry point
     if (argc != 2){

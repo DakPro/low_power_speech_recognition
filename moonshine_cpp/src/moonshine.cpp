@@ -5,7 +5,7 @@
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <sstream>
-
+#include <onnxruntime_cxx_api.h>
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -60,6 +60,8 @@ std::string readFileAsUtf8(const std::string &file_path)
     return buffer.str();
 }
 
+
+
 MoonshineModel::MoonshineModel(const std::string &models_dir)
     : memory_info_(Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeCPU))
 {
@@ -83,7 +85,9 @@ std::unique_ptr<Ort::Session> MoonshineModel::createSession(const std::string &m
     }
 
     Ort::SessionOptions session_options;
-    session_options.SetIntraOpNumThreads(1);
+    session_options.SetIntraOpNumThreads(4);
+    session_options.SetInterOpNumThreads(2);
+    session_options.SetExecutionMode(ORT_PARALLEL);
     session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
 
 #ifdef _WIN32

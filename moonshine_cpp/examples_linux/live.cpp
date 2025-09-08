@@ -1,185 +1,226 @@
-// live.cpp
+// live_transcription.cpp
 #define SDL_MAIN_HANDLED
 #include <moonshine.hpp>
 #include <SDL.h>
 #include <iostream>
 #include <vector>
-#include <chrono>
+#include <deque>
 #include <thread>
 #include <atomic>
-#include "alt_conio.hpp"
-#include <csignal> // Required for signal handling
+#include <mutex>
+#include <csignal>
+#include <cmath>
 
 std::atomic<bool> running(true);
-
 void signalHandler(int signum) {
-    if (signum == SIGINT) {
-        running.store(false);
-    }
+    if (signum == SIGINT) running.store(false);
 }
 
+// Audio / timing constants
 const int SAMPLE_RATE = 16000;
-const int BUFFER_SIZE = 4096;
+const int CHUNK_SIZE = 512; // match your Python/silero chunk
+const int LOOKBACK_CHUNKS = 5;
+const size_t LOOKBACK_SAMPLES = LOOKBACK_CHUNKS * CHUNK_SIZE;
+const float MIN_REFRESH_SECS = 0.2f; // partial-refresh cadence
+const float MAX_SPEECH_SECS = 15.0f; // cap segment length
+const float VAD_START_THRESHOLD = 0.01f; // RMS threshold to consider speech start
+const int SILENCE_CHUNKS_TO_END = 10; // number of consecutive quiet chunks to mark end (~0.192s)
 
-void audioCallback(void* userdata, Uint8* stream, int len){
-    auto* buffer = static_cast<std::vector<float>*>(userdata);
+// Thread-shared audio buffer (use deque for efficient pop_front)
+std::deque<float> audio_buffer;
+std::mutex audio_mutex;
+
+// SDL audio callback: push samples into shared deque
+void audioCallback([[maybe_unused]] void* userdata, Uint8* stream, int len){
     auto* samples = reinterpret_cast<float*>(stream);
     int sample_count = int(len / sizeof(float));
-    buffer->insert(buffer->end(), samples, samples + sample_count);
+    std::lock_guard<std::mutex> lock(audio_mutex);
+    for (int i = 0; i < sample_count; ++i) audio_buffer.push_back(samples[i]);
 }
 
-void listAudioDevices(){
-    int count = SDL_GetNumAudioDevices(SDL_TRUE);  // SDL_TRUE for recording devices
-    std::cout << "Available recording devices:\n";
-    for (int i = 0; i < count; ++i){
-        const char* name = SDL_GetAudioDeviceName(i, SDL_TRUE);
-        std::cout << i << ": " << (name ? name : "Unknown Device") << "\n";
-    }
+// compute RMS of a chunk
+float compute_rms(const std::vector<float>& chunk){
+    double s = 0.0;
+    for (float v : chunk) s += double(v) * double(v);
+    if (chunk.empty()) return 0.0f;
+    return float(std::sqrt(s / (double)chunk.size()));
+}
+
+// helper to print and overwrite single line (keeps terminal tidy)
+void print_overwrite(const std::string& text){
+    // Clear current line and overwrite
+    std::cout << "\r\033[K" << text << std::flush;
 }
 
 int main(int argc, char* argv[]){
-    std::cout << "Moonshine Live Transcription\n";
-    SDL_SetMainReady();  // Tell SDL we'll handle the main entry point
     if (argc != 2){
         std::cerr << "Usage: " << argv[0] << " <models_dir>\n";
         return 1;
     }
 
+    std::signal(SIGINT, signalHandler);
+
     try{
-        // Initialize model
-        std::cout << "Initializing...\n";
+        std::cout << "Loading Moonshine model...\n";
         MoonshineModel model(argv[1]);
-        std::cout << "Model initialized\n";
 
-        // Register signal handler for graceful shutdown
-        std::signal(SIGINT, signalHandler);
+        // Warmup inference (one second of silence) to avoid long first inference
+        std::vector<float> warmup(SAMPLE_RATE, 0.0f);
+        try {
+            auto dummy = model.generate(warmup);
+            (void)dummy;
+        } catch (...) {
+            // ignore warmup failures (but report)
+            std::cerr << "Warning: warmup inference failed (continuing)\n";
+        }
 
-        // Initialize SDL
+        // Initialize SDL for audio capture
         if (SDL_Init(SDL_INIT_AUDIO) < 0){
-            std::cerr << "Could not initialize SDL: " << SDL_GetError() << "\n";
+            std::cerr << "SDL_Init failed: " << SDL_GetError() << "\n";
             return 1;
         }
-        std::cout << "SDL initialized\n";
 
-        // List available devices
-        listAudioDevices();
-
-        // Set up audio capture
         SDL_AudioSpec desired_spec;
         SDL_AudioSpec obtained_spec;
         SDL_zero(desired_spec);
         desired_spec.freq = SAMPLE_RATE;
         desired_spec.format = AUDIO_F32;
         desired_spec.channels = 1;
-        desired_spec.samples = BUFFER_SIZE;
+        desired_spec.samples = CHUNK_SIZE;
         desired_spec.callback = audioCallback;
 
-        std::vector<float> audio_buffer;
-        desired_spec.userdata = &audio_buffer;
-
-        // Open the default recording device
-        SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL,      // device name (NULL for default)
-                                                    SDL_TRUE,  // is_capture (recording)
-                                                    &desired_spec,   // desired spec
-                                                    &obtained_spec,  // obtained spec
-                                                    SDL_AUDIO_ALLOW_FORMAT_CHANGE);
-
-        if (dev == 0)
-        {
+        // Open default recording device
+        SDL_AudioDeviceID dev = SDL_OpenAudioDevice(nullptr, SDL_TRUE, &desired_spec, &obtained_spec, SDL_AUDIO_ALLOW_FORMAT_CHANGE);
+        if (dev == 0){
             std::cerr << "Could not open audio device: " << SDL_GetError() << "\n";
             SDL_Quit();
             return 1;
         }
 
-        std::cout << "Audio device opened: " << SDL_GetAudioDeviceName(0, SDL_TRUE) << "\n";
-        // print the obtained spec
-        std::cout << "Obtained spec: " << obtained_spec.freq << " Hz, "
-                  << SDL_AUDIO_BITSIZE(obtained_spec.format) << " bits, "
-                  << (obtained_spec.channels == 1 ? "mono" : "stereo") << "\n";
-
-        // Start audio capture
+        std::cout << "Recording started (press Ctrl+C to stop)\n";
         SDL_PauseAudioDevice(dev, 0);
 
-        std::thread transcription_thread(
-                [&]()
-                {
-                    std::cout << "Transcribing...\n";
-                    size_t last_buffer_size = 0;
-                    while (running)
-                    {
-                        if (audio_buffer.size() >= SAMPLE_RATE)
-                        {
-                            if (audio_buffer.size() == last_buffer_size)
-                            {
-                                // No new audio data
-                                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                                continue;
-                            }
-                            last_buffer_size = audio_buffer.size();
+        // Transcription thread: consumes from audio_buffer using simple energy VAD
+        std::thread transcribe_thread([&](){
+                                          std::vector<float> speech; // collected speech while recording
+                                          bool recording = false;
+                                          size_t silence_chunks = 0;
+                                          auto last_infer_time = std::chrono::steady_clock::now();
+                                          double total_speech_secs = 0.0;
+                                          size_t last_audio_size = 0;
 
-                            // Process audio buffer
-                            std::vector<float> buffer(audio_buffer.begin(), audio_buffer.end());
+                                          while (running.load()){
+                                              // collect a chunk worth of samples from shared buffer
+                                              std::vector<float> chunk;
+                                              {
+                                                  std::lock_guard<std::mutex> lock(audio_mutex);
+                                                  while (audio_buffer.size() >= CHUNK_SIZE && chunk.size() < CHUNK_SIZE){
+                                                      chunk.push_back(audio_buffer.front());
+                                                      audio_buffer.pop_front();
+                                                  }
+                                              }
 
-                            // Limit the buffer size to 10 seconds
-                            if (audio_buffer.size() > 2 * SAMPLE_RATE)
-                            {
-                                audio_buffer.erase(audio_buffer.begin(), audio_buffer.end()-2 * SAMPLE_RATE);
-                            }
+                                              if (chunk.empty()){
+                                                  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                                                  continue;
+                                              }
 
-                            // Generate tokens
-                            auto start = std::chrono::high_resolution_clock::now();
-                            auto tokens = model.generate(buffer);
-                            auto end = std::chrono::high_resolution_clock::now();
-                            std::chrono::duration<double> duration = end - start;
+                                              float rms = compute_rms(chunk);
 
-                            // Detokenize tokens
-                            std::string result = model.detokenize(tokens);
+                                              // If not recording, keep only lookback buffer
+                                              if (!recording){
+                                                  // append lookback chunk size, but cap to LOOKBACK_SAMPLES
+                                                  speech.insert(speech.end(), chunk.begin(), chunk.end());
+                                                  if (speech.size() > LOOKBACK_SAMPLES) speech.erase(speech.begin(), speech.begin() + (long)(speech.size() - LOOKBACK_SAMPLES));
+                                              } else {
+                                                  // while recording, append everything
+                                                  speech.insert(speech.end(), chunk.begin(), chunk.end());
+                                              }
 
-                            // erase the last console line
-                            std::cout << "\x1b[A";
-                            // clear the line
-                            std::cout << "\r\033[K";
+                                              // simple VAD heuristics
+                                              if (!recording && rms > VAD_START_THRESHOLD){
+                                                  recording = true;
+                                                  silence_chunks = 0;
+                                                  last_infer_time = std::chrono::steady_clock::now();
+                                                  // keep a small lookback for context
+                                                  if (speech.size() > LOOKBACK_SAMPLES) {
+                                                      // already capped above
+                                                  }
+                                                  std::cout << "\n[Speech started]\n";
+                                              }
 
-                            std::cout << "Transcription: " << result << "\n";
-                        }
-                        else
-                        {
-                            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                        }
-                    }
-                    std::cout << "Transcription thread finished\n";
-                });
+                                              if (recording){
+                                                  if (rms <= VAD_START_THRESHOLD) {
+                                                      ++silence_chunks;
+                                                  } else {
+                                                      silence_chunks = 0;
+                                                  }
 
-        std::cout << "Recording... Press Ctrl+C to stop.\n";
-        try{
-            while (running)
-            {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            }
-        }
-        catch (const std::exception& e)
-        {
-            std::cerr << "Error: " << e.what() << "\n";
-            return 1;
-        }
+                                                  // If we've detected enough silence, or the speech is too long, treat as end
+                                                  double speech_duration = double(speech.size()) / SAMPLE_RATE;
+                                                  if (silence_chunks >= SILENCE_CHUNKS_TO_END || speech_duration > MAX_SPEECH_SECS){
+                                                      // Final inference
+                                                      try {
+                                                          auto start = std::chrono::steady_clock::now();
+                                                          auto tokens = model.generate(speech);
+                                                          std::string result = model.detokenize(tokens);
+                                                          auto end = std::chrono::steady_clock::now();
+                                                          std::chrono::duration<double> d = end - start;
+                                                          print_overwrite(std::string("Transcription: ") + result + "\n");
+                                                      } catch (const std::exception& e){
+                                                          print_overwrite(std::string("Transcription error: ") + e.what() + "\n");
+                                                      }
 
-        // Stop audio capture
+                                                      // reset
+                                                      speech.clear();
+                                                      recording = false;
+                                                      silence_chunks = 0;
+                                                      std::cout << "[Speech ended]\n";
+                                                      continue; // go fetch more audio
+                                                  }
+
+                                                  // Incremental refresh: run partial transcription every MIN_REFRESH_SECS
+                                                  auto now = std::chrono::steady_clock::now();
+                                                  std::chrono::duration<double> since_last = now - last_infer_time;
+                                                  if (since_last.count() >= MIN_REFRESH_SECS){
+                                                      try {
+                                                          auto tokens = model.generate(speech);
+                                                          std::string partial = model.detokenize(tokens);
+                                                          print_overwrite(std::string("Partial: ") + partial);
+                                                      } catch (const std::exception& e){
+                                                          print_overwrite(std::string("Partial error: ") + e.what());
+                                                      }
+                                                      last_infer_time = now;
+                                                  }
+                                              }
+                                          }
+
+                                          // On exit: flush remaining speech if any
+                                          if (!speech.empty()){
+                                              try {
+                                                  auto tokens = model.generate(speech);
+                                                  std::string final = model.detokenize(tokens);
+                                                  print_overwrite(std::string("Final: ") + final + "\n");
+                                              } catch (...) {
+                                                  // swallow
+                                              }
+                                          }
+                                      });
+
+        // main loop just waits for SIGINT
+        while (running.load()) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        // Stop audio
         SDL_PauseAudioDevice(dev, 1);
+        transcribe_thread.join();
 
-        // Wait for transcription thread to finish
-        transcription_thread.join();
-
-        // Clean up
         SDL_CloseAudioDevice(dev);
         SDL_Quit();
-    }
-    catch (const Ort::Exception& e)
-    {
+
+    } catch (const Ort::Exception& e){
         std::cerr << "ONNX Runtime error: " << e.what() << "\n";
         return 1;
-    }
-    catch (const std::exception& e)
-    {
+    } catch (const std::exception& e){
         std::cerr << "Error: " << e.what() << "\n";
         return 1;
     }

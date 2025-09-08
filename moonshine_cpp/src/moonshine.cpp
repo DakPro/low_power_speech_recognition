@@ -87,7 +87,7 @@ std::unique_ptr<Ort::Session> MoonshineModel::createSession(const std::string &m
     Ort::SessionOptions session_options;
     session_options.SetIntraOpNumThreads(4);
     session_options.SetInterOpNumThreads(1);
-    session_options.SetExecutionMode(ORT_PARALLEL);
+    session_options.SetExecutionMode(ORT_SEQUENTIAL);
     session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
 
 #ifdef _WIN32

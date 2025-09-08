@@ -22,6 +22,7 @@ std::vector<float> readWavFile(const std::string &filename){
 
     std::vector<float> buffer(sfinfo.frames * sfinfo.channels);
     sf_readf_float(file, buffer.data(), sfinfo.frames);
+    std::cout << "Buffer size:" << buffer.size() << '\n';
     sf_close(file);
     return buffer;
 }
@@ -34,12 +35,13 @@ std::string transcribe(MoonshineModel &model, std::vector<float> &audio_samples)
         auto start = std::chrono::high_resolution_clock::now();
         for(unsigned long long i=0; i<length; i+=SAMPLE_RATE*30)
         {
-            std::vector audio_sample(audio_samples.begin()+i,
-                                     audio_samples.begin()+std::min(i+SAMPLE_RATE*30, length));
+            std::vector audio_sample(audio_samples.begin()+(long)i,
+                                     audio_samples.begin()+(long)std::min(i+SAMPLE_RATE*30, length));
             auto tokens = model.generate(audio_sample);
             std::string result = model.detokenize(tokens);
             result.erase(0,3);
             result.erase(result.end()-4,result.end());
+            ans << result;
         }
         std::string ans_str = ans.str();
         auto end = std::chrono::high_resolution_clock::now();

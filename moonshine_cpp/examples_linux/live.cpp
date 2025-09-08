@@ -121,9 +121,9 @@ int main(int argc, char* argv[]){
                             std::vector<float> buffer(audio_buffer.begin(), audio_buffer.end());
 
                             // Limit the buffer size to 10 seconds
-                            if (audio_buffer.size() > 10 * SAMPLE_RATE)
+                            if (audio_buffer.size() > 2 * SAMPLE_RATE)
                             {
-                                audio_buffer.erase(audio_buffer.begin(), audio_buffer.end());
+                                audio_buffer.erase(audio_buffer.begin(), audio_buffer.end()-2 * SAMPLE_RATE);
                             }
 
                             // Generate tokens

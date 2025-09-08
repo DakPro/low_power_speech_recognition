@@ -93,6 +93,55 @@ int main(int argc, char* argv[]){
 
         SDL_PauseAudioDevice(dev, 0);
 
+        // helper to convert and push captured bytes into audio_buffer
+        auto push_captured = [&](const Uint8* data, int bytes, const SDL_AudioSpec& spec){
+            int sample_bytes = SDL_AUDIO_BITSIZE(spec.format) / 8;
+            int channels = spec.channels;
+            int samples = bytes / sample_bytes / channels; // mono expected channels==1
+            // support two common formats: AUDIO_F32 and AUDIO_S16SYS
+            if (spec.format == AUDIO_F32SYS || spec.format == AUDIO_F32) {
+                const auto* fdata = reinterpret_cast<const float*>(data);
+                std::lock_guard<std::mutex> lock(audio_mutex);
+                for (int i = 0; i < samples * channels; ++i) audio_buffer.push_back(fdata[i]);
+            } else if (spec.format == AUDIO_S16SYS || spec.format == AUDIO_S16LSB || spec.format == AUDIO_S16MSB) {
+                const auto* s16 = reinterpret_cast<const int16_t*>(data);
+                std::lock_guard<std::mutex> lock(audio_mutex);
+                for (int i = 0; i < samples * channels; ++i) audio_buffer.push_back(float(s16[i]) / 32768.0f);
+            } else {
+                // unsupported format -> try to treat as 16-bit signed as fallback
+                const auto* s16 = reinterpret_cast<const int16_t*>(data);
+                std::lock_guard<std::mutex> lock(audio_mutex);
+                for (int i = 0; i < samples * channels; ++i) audio_buffer.push_back(float(s16[i]) / 32768.0f);
+            }
+        };
+
+        // capture-reader thread: dequeues from SDL capture queue and pushes into audio_buffer
+        std::thread capture_reader([&](){
+                                       const int READ_BYTES = CHUNK_SIZE * (SDL_AUDIO_BITSIZE(obtained_spec.format) / 8) * obtained_spec.channels;
+                                       std::vector<Uint8> tmp;
+                                       tmp.resize(READ_BYTES);
+                                       while (running.load()){
+                                           int queued = SDL_GetQueuedAudioSize(dev); // bytes available to dequeue
+                                           if (queued >= READ_BYTES){
+                                               int to_read = (queued / READ_BYTES) * READ_BYTES; // read whole multiples of READ_BYTES
+                                               // ensure tmp buffer big enough
+                                               if ((int)tmp.size() < to_read) tmp.resize(to_read);
+                                               int got = SDL_DequeueAudio(dev, tmp.data(), to_read);
+                                               if (got > 0) {
+                                                   // push in CHUNK-sized pieces for downstream consumer
+                                                   int offset = 0;
+                                                   while (offset < got){
+                                                       int piece = std::min(got - offset, READ_BYTES);
+                                                       push_captured(tmp.data() + offset, piece, obtained_spec);
+                                                       offset += piece;
+                                                   }
+                                               }
+                                           } else {
+                                               std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                                           }
+                                       }
+                                   });
+
         // Transcription thread: consumes from audio_buffer using simple energy VAD
         std::thread transcribe_thread([&](){
                                           std::vector<float> speech;

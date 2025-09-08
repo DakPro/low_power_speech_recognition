@@ -24,11 +24,14 @@ const size_t LOOKBACK_SAMPLES = LOOKBACK_CHUNKS * CHUNK_SIZE;
 const float MIN_REFRESH_SECS = 0.2f; // partial-refresh cadence
 const float MAX_SPEECH_SECS = 15.0f; // cap segment length
 const float VAD_START_THRESHOLD = 0.01f; // RMS threshold to consider speech start
-const int SILENCE_CHUNKS_TO_END = 10; // number of consecutive quiet chunks to mark end (~0.192s)
+const int SILENCE_CHUNKS_TO_END = 24; // number of consecutive quiet chunks to mark end (~0.192s)
 
 // Thread-shared audio buffer (use deque for efficient pop_front)
 std::deque<float> audio_buffer;
 std::mutex audio_mutex;
+
+
+std::vector<float> warmup(SAMPLE_RATE, 0.0f);
 
 // SDL audio callback: push samples into shared deque
 void audioCallback([[maybe_unused]] void* userdata, Uint8* stream, int len){
@@ -61,20 +64,11 @@ int main(int argc, char* argv[]){
     std::signal(SIGINT, signalHandler);
 
     try{
-        std::cout << "Loading Moonshine model...\n";
         MoonshineModel model(argv[1]);
-
-        // Warmup inference (one second of silence) to avoid long first inference
-        std::vector<float> warmup(SAMPLE_RATE, 0.0f);
-        try {
+        try { // Interface warmup
             auto dummy = model.generate(warmup);
             (void)dummy;
-        } catch (...) {
-            // ignore warmup failures (but report)
-            std::cerr << "Warning: warmup inference failed (continuing)\n";
-        }
-
-        // Initialize SDL for audio capture
+        }catch(...){} //ignore
         if (SDL_Init(SDL_INIT_AUDIO) < 0){
             std::cerr << "SDL_Init failed: " << SDL_GetError() << "\n";
             return 1;
@@ -89,7 +83,6 @@ int main(int argc, char* argv[]){
         desired_spec.samples = CHUNK_SIZE;
         desired_spec.callback = audioCallback;
 
-        // Open default recording device
         SDL_AudioDeviceID dev = SDL_OpenAudioDevice(nullptr, SDL_TRUE, &desired_spec, &obtained_spec, SDL_AUDIO_ALLOW_FORMAT_CHANGE);
         if (dev == 0){
             std::cerr << "Could not open audio device: " << SDL_GetError() << "\n";
@@ -97,21 +90,23 @@ int main(int argc, char* argv[]){
             return 1;
         }
 
-        std::cout << "Recording started (press Ctrl+C to stop)\n";
+
         SDL_PauseAudioDevice(dev, 0);
 
         // Transcription thread: consumes from audio_buffer using simple energy VAD
         std::thread transcribe_thread([&](){
-                                          std::vector<float> speech; // collected speech while recording
+                                          std::vector<float> speech;
+                                          speech.reserve((unsigned long)(MAX_SPEECH_SECS*SAMPLE_RATE));
                                           bool recording = false;
                                           size_t silence_chunks = 0;
                                           auto last_infer_time = std::chrono::steady_clock::now();
-                                          double total_speech_secs = 0.0;
-                                          size_t last_audio_size = 0;
+//                                          double total_speech_secs = 0.0;
+//                                          size_t last_audio_size = 0;
 
+                                          std::vector<float> chunk;
+                                          chunk.reserve(CHUNK_SIZE);
                                           while (running.load()){
-                                              // collect a chunk worth of samples from shared buffer
-                                              std::vector<float> chunk;
+
                                               {
                                                   std::lock_guard<std::mutex> lock(audio_mutex);
                                                   while (audio_buffer.size() >= CHUNK_SIZE && chunk.size() < CHUNK_SIZE){
@@ -207,6 +202,8 @@ int main(int argc, char* argv[]){
                                           }
                                       });
 
+
+        std::cout << "Recording started (press Ctrl+C to stop)\n";
         // main loop just waits for SIGINT
         while (running.load()) std::this_thread::sleep_for(std::chrono::milliseconds(100));
 

@@ -24,7 +24,7 @@ const size_t LOOKBACK_SAMPLES = LOOKBACK_CHUNKS * CHUNK_SIZE;
 const float MIN_REFRESH_SECS = 0.2f; // partial-refresh cadence
 const float MAX_SPEECH_SECS = 15.0f; // cap segment length
 const float VAD_START_THRESHOLD = 0.01f; // RMS threshold to consider speech start
-const int SILENCE_CHUNKS_TO_END = 24; // number of consecutive quiet chunks to mark end (~0.192s)
+const int SILENCE_CHUNKS_TO_END = 10; // number of consecutive quiet chunks to mark end (~0.32s)
 
 // Thread-shared audio buffer (use deque for efficient pop_front)
 std::deque<float> audio_buffer;
@@ -83,7 +83,7 @@ int main(int argc, char* argv[]){
         desired_spec.samples = CHUNK_SIZE;
         desired_spec.callback = audioCallback;
 
-        SDL_AudioDeviceID dev = SDL_OpenAudioDevice(nullptr, SDL_TRUE, &desired_spec, &obtained_spec, SDL_AUDIO_ALLOW_FORMAT_CHANGE);
+        SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, SDL_TRUE, &desired_spec, &obtained_spec, SDL_AUDIO_ALLOW_FORMAT_CHANGE);
         if (dev == 0){
             std::cerr << "Could not open audio device: " << SDL_GetError() << "\n";
             SDL_Quit();
@@ -106,6 +106,7 @@ int main(int argc, char* argv[]){
                                           std::vector<float> chunk;
                                           chunk.reserve(CHUNK_SIZE);
                                           while (running.load()){
+                                              chunk.clear();
 
                                               {
                                                   std::lock_guard<std::mutex> lock(audio_mutex);

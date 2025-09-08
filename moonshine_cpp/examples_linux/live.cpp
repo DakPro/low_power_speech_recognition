@@ -4,7 +4,6 @@
 #include <SDL.h>
 #include <iostream>
 #include <vector>
-#include <deque>
 #include <thread>
 #include <atomic>
 #include <mutex>
@@ -25,249 +24,243 @@ const float MIN_REFRESH_SECS = 0.2f; // partial-refresh cadence
 const float MAX_SPEECH_SECS = 15.0f; // cap segment length
 const float VAD_START_THRESHOLD = 0.01f; // RMS threshold to consider speech start
 const int SILENCE_CHUNKS_TO_END = 10; // number of consecutive quiet chunks to mark end (~0.32s)
+const size_t MIN_MODEL_SAMPLES = 1024; // ~64 ms
 
 // Thread-shared audio buffer (use deque for efficient pop_front)
-std::deque<float> audio_buffer;
 std::mutex audio_mutex;
 
+struct RingBuffer {
+    std::vector<float> buffer;
+    size_t head = 0;
+    size_t tail = 0;
+    size_t capacity;
 
-std::vector<float> warmup(SAMPLE_RATE, 0.0f);
+    explicit RingBuffer(size_t size) : buffer(size), capacity(size) {}
 
-// SDL audio callback: push samples into shared deque
-void audioCallback([[maybe_unused]] void* userdata, Uint8* stream, int len){
-    auto* samples = reinterpret_cast<float*>(stream);
-    int sample_count = int(len / sizeof(float));
-    std::lock_guard<std::mutex> lock(audio_mutex);
-    for (int i = 0; i < sample_count; ++i) audio_buffer.push_back(samples[i]);
+    [[nodiscard]] size_t size() const {
+        if (head >= tail) return head - tail;
+        else return capacity - tail + head;
+    }
+
+    bool push(const float* data, size_t n) {
+        if (n > capacity - size()) return false; // overflow
+        for (size_t i = 0; i < n; ++i) {
+            buffer[head] = data[i];
+            head = (head + 1) % capacity;
+        }
+        return true;
+    }
+
+    size_t pop(float* out, size_t n) {
+        size_t avail = size();
+        size_t to_pop = std::min(n, avail);
+        for (size_t i = 0; i < to_pop; ++i) {
+            out[i] = buffer[tail];
+            tail = (tail + 1) % capacity;
+        }
+        return to_pop;
+    }
+};
+
+float compute_rms(const float* data, size_t n) {
+    float s = 0.0f;
+    for (size_t i = 0; i < n; ++i) s += data[i] * data[i];
+    return (n > 0) ? std::sqrt(s / (float) n) : 0.0f;
 }
-
-// compute RMS of a chunk
-float compute_rms(const std::vector<float>& chunk){
-    double s = 0.0;
-    for (float v : chunk) s += double(v) * double(v);
-    if (chunk.empty()) return 0.0f;
-    return float(std::sqrt(s / (double)chunk.size()));
-}
-
 // helper to print and overwrite single line (keeps terminal tidy)
 void print_overwrite(const std::string& text){
     // Clear current line and overwrite
     std::cout << "\r\033[K" << text << std::flush;
 }
 
-int main(int argc, char* argv[]){
-    if (argc != 2){
+// Memory allocation before runtime
+RingBuffer audio_buffer(SAMPLE_RATE * 5); // 5 sec buffer
+RingBuffer speech_buffer((size_t)(MAX_SPEECH_SECS * SAMPLE_RATE));
+std::vector<float> warmup(SAMPLE_RATE, 0.0f);
+float dummy_arr[SAMPLE_RATE];
+
+int main(int argc, char* argv[])
+{
+    if (argc != 2)
+    {
         std::cerr << "Usage: " << argv[0] << " <models_dir>\n";
         return 1;
     }
-
     std::signal(SIGINT, signalHandler);
 
-    try{
+    try
+    {
         MoonshineModel model(argv[1]);
-        try { // Interface warmup
-            auto dummy = model.generate(warmup);
-            (void)dummy;
-        }catch(...){} //ignore
-        if (SDL_Init(SDL_INIT_AUDIO) < 0){
+        try
+        {
+            model.generate(warmup);
+        }
+        catch (...)
+        {
+        }  // Warmup
+
+        if (SDL_Init(SDL_INIT_AUDIO) < 0)
+        {
             std::cerr << "SDL_Init failed: " << SDL_GetError() << "\n";
             return 1;
         }
 
-        SDL_AudioSpec desired_spec;
-        SDL_AudioSpec obtained_spec;
-        SDL_zero(desired_spec);
-        desired_spec.freq = SAMPLE_RATE;
-        desired_spec.format = AUDIO_F32;
-        desired_spec.channels = 1;
-        desired_spec.samples = CHUNK_SIZE;
-        desired_spec.callback = audioCallback;
+        SDL_AudioSpec spec;
+        SDL_zero(spec);
+        spec.freq = SAMPLE_RATE;
+        spec.format = AUDIO_F32;
+        spec.channels = 1;
+        spec.samples = CHUNK_SIZE;
 
-        SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, SDL_TRUE, &desired_spec, &obtained_spec, SDL_AUDIO_ALLOW_FORMAT_CHANGE);
-        if (dev == 0){
+        SDL_AudioDeviceID dev = SDL_OpenAudioDevice(nullptr, SDL_TRUE, &spec, nullptr, 0);
+        if (!dev)
+        {
             std::cerr << "Could not open audio device: " << SDL_GetError() << "\n";
             SDL_Quit();
             return 1;
         }
 
-
         SDL_PauseAudioDevice(dev, 0);
 
-        // helper to convert and push captured bytes into audio_buffer
-        auto push_captured = [&](const Uint8* data, int bytes, const SDL_AudioSpec& spec){
-            int sample_bytes = SDL_AUDIO_BITSIZE(spec.format) / 8;
-            int channels = spec.channels;
-            int samples = bytes / sample_bytes / channels; // mono expected channels==1
-            // support two common formats: AUDIO_F32 and AUDIO_S16SYS
-            if (spec.format == AUDIO_F32SYS || spec.format == AUDIO_F32) {
-                const auto* fdata = reinterpret_cast<const float*>(data);
-                std::lock_guard<std::mutex> lock(audio_mutex);
-                for (int i = 0; i < samples * channels; ++i) audio_buffer.push_back(fdata[i]);
-            } else if (spec.format == AUDIO_S16SYS || spec.format == AUDIO_S16LSB || spec.format == AUDIO_S16MSB) {
-                const auto* s16 = reinterpret_cast<const int16_t*>(data);
-                std::lock_guard<std::mutex> lock(audio_mutex);
-                for (int i = 0; i < samples * channels; ++i) audio_buffer.push_back(float(s16[i]) / 32768.0f);
-            } else {
-                // unsupported format -> try to treat as 16-bit signed as fallback
-                const auto* s16 = reinterpret_cast<const int16_t*>(data);
-                std::lock_guard<std::mutex> lock(audio_mutex);
-                for (int i = 0; i < samples * channels; ++i) audio_buffer.push_back(float(s16[i]) / 32768.0f);
-            }
-        };
+        std::thread capture_thread(
+            [&]()
+            {
+                std::vector<float> tmp(CHUNK_SIZE);
+                while (running.load())
+                {
+                    int queued_bytes = (int)SDL_GetQueuedAudioSize(dev);
+                    if (queued_bytes >= (int)(CHUNK_SIZE * sizeof(float)))
+                    {
+                        int got =
+                            (int)SDL_DequeueAudio(dev, tmp.data(), CHUNK_SIZE * sizeof(float));
+                        if (got > 0) audio_buffer.push(tmp.data(), CHUNK_SIZE);
+                    }
+                    else
+                    {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                    }
+                }
+            });
 
-        // capture-reader thread: dequeues from SDL capture queue and pushes into audio_buffer
-        std::thread capture_reader([&](){
-                                       const int READ_BYTES = CHUNK_SIZE * (SDL_AUDIO_BITSIZE(obtained_spec.format) / 8) * obtained_spec.channels;
-                                       std::vector<Uint8> tmp;
-                                       tmp.resize(READ_BYTES);
-                                       while (running.load()){
-                                           int queued = SDL_GetQueuedAudioSize(dev); // bytes available to dequeue
-                                           if (queued >= READ_BYTES){
-                                               int to_read = (queued / READ_BYTES) * READ_BYTES; // read whole multiples of READ_BYTES
-                                               // ensure tmp buffer big enough
-                                               if ((int)tmp.size() < to_read) tmp.resize(to_read);
-                                               int got = SDL_DequeueAudio(dev, tmp.data(), to_read);
-                                               if (got > 0) {
-                                                   // push in CHUNK-sized pieces for downstream consumer
-                                                   int offset = 0;
-                                                   while (offset < got){
-                                                       int piece = std::min(got - offset, READ_BYTES);
-                                                       push_captured(tmp.data() + offset, piece, obtained_spec);
-                                                       offset += piece;
-                                                   }
-                                               }
-                                           } else {
-                                               std::this_thread::sleep_for(std::chrono::milliseconds(5));
-                                           }
-                                       }
-                                   });
+        std::thread transcribe_thread(
+            [&]()
+            {
+                std::vector<float> chunk(CHUNK_SIZE);
+                bool recording = false;
+                int silence_chunks = 0;
+                auto last_infer_time = std::chrono::steady_clock::now();
 
-        // Transcription thread: consumes from audio_buffer using simple energy VAD
-        std::thread transcribe_thread([&](){
-                                          std::vector<float> speech;
-                                          speech.reserve((unsigned long)(MAX_SPEECH_SECS*SAMPLE_RATE));
-                                          bool recording = false;
-                                          size_t silence_chunks = 0;
-                                          auto last_infer_time = std::chrono::steady_clock::now();
-//                                          double total_speech_secs = 0.0;
-//                                          size_t last_audio_size = 0;
+                while (running.load())
+                {
+                    if (audio_buffer.size() < CHUNK_SIZE){
+                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                        continue;
+                    }
+                    audio_buffer.pop(chunk.data(), CHUNK_SIZE);
+                    float rms = compute_rms(chunk.data(), CHUNK_SIZE);
 
-                                          std::vector<float> chunk;
-                                          chunk.reserve(CHUNK_SIZE);
-                                          while (running.load()){
-                                              chunk.clear();
+                    // Push into speech buffer
+                    speech_buffer.push(chunk.data(), CHUNK_SIZE);
 
-                                              {
-                                                  std::lock_guard<std::mutex> lock(audio_mutex);
-                                                  while (audio_buffer.size() >= CHUNK_SIZE && chunk.size() < CHUNK_SIZE){
-                                                      chunk.push_back(audio_buffer.front());
-                                                      audio_buffer.pop_front();
-                                                  }
-                                              }
+                    if (!recording)
+                        while(speech_buffer.size() > LOOKBACK_SAMPLES) // keep look-back
+                            speech_buffer.pop(dummy_arr,std::min(SAMPLE_RATE, int(speech_buffer.size()-LOOKBACK_SAMPLES)));
 
-                                              if (chunk.empty()){
-                                                  std::this_thread::sleep_for(std::chrono::milliseconds(10));
-                                                  continue;
-                                              }
 
-                                              float rms = compute_rms(chunk);
+                    // VAD start
+                    if (!recording && rms > VAD_START_THRESHOLD)
+                    {
+                        recording = true;
+                        silence_chunks = 0;
+                        last_infer_time = std::chrono::steady_clock::now();
+                        std::cout << "\n[Speech started]\n";
+                    }
 
-                                              // If not recording, keep only lookback buffer
-                                              if (!recording){
-                                                  // append lookback chunk size, but cap to LOOKBACK_SAMPLES
-                                                  speech.insert(speech.end(), chunk.begin(), chunk.end());
-                                                  if (speech.size() > LOOKBACK_SAMPLES) speech.erase(speech.begin(), speech.begin() + (long)(speech.size() - LOOKBACK_SAMPLES));
-                                              } else {
-                                                  // while recording, append everything
-                                                  speech.insert(speech.end(), chunk.begin(), chunk.end());
-                                              }
+                    if (recording)
+                    {
+                        if (rms <= VAD_START_THRESHOLD)
+                            ++silence_chunks;
+                        else
+                            silence_chunks = 0;
 
-                                              // simple VAD heuristics
-                                              if (!recording && rms > VAD_START_THRESHOLD){
-                                                  recording = true;
-                                                  silence_chunks = 0;
-                                                  last_infer_time = std::chrono::steady_clock::now();
-                                                  // keep a small lookback for context
-                                                  if (speech.size() > LOOKBACK_SAMPLES) {
-                                                      // already capped above
-                                                  }
-                                                  std::cout << "\n[Speech started]\n";
-                                              }
+                        // Check end conditions
+                        if (silence_chunks >= SILENCE_CHUNKS_TO_END ||
+                            speech_buffer.size() >= speech_buffer.capacity)
+                        {
+                            // Convert speech buffer to vector
+                            std::vector<float> speech(speech_buffer.size());
+                            speech_buffer.pop(speech.data(), speech.size());
 
-                                              if (recording){
-                                                  if (rms <= VAD_START_THRESHOLD) {
-                                                      ++silence_chunks;
-                                                  } else {
-                                                      silence_chunks = 0;
-                                                  }
+                            try
+                            {
+                                auto tokens = model.generate(speech);
+                                std::string result = model.detokenize(tokens);
+                                print_overwrite("Transcription: " + result + "\n");
+                            }
+                            catch (const std::exception& e)
+                            {
+                                print_overwrite(std::string("Transcription error: ") + e.what() +
+                                                "\n");
+                            }
 
-                                                  // If we've detected enough silence, or the speech is too long, treat as end
-                                                  double speech_duration = double(speech.size()) / SAMPLE_RATE;
-                                                  if (silence_chunks >= SILENCE_CHUNKS_TO_END || speech_duration > MAX_SPEECH_SECS){
-                                                      // Final inference
-                                                      try {
-                                                          auto start = std::chrono::steady_clock::now();
-                                                          auto tokens = model.generate(speech);
-                                                          std::string result = model.detokenize(tokens);
-                                                          auto end = std::chrono::steady_clock::now();
-                                                          std::chrono::duration<double> d = end - start;
-                                                          print_overwrite(std::string("Transcription: ") + result + "\n");
-                                                      } catch (const std::exception& e){
-                                                          print_overwrite(std::string("Transcription error: ") + e.what() + "\n");
-                                                      }
+                            recording = false;
+                            silence_chunks = 0;
+                            std::cout << "[Speech ended]\n";
+                            continue;
+                        }
 
-                                                      // reset
-                                                      speech.clear();
-                                                      recording = false;
-                                                      silence_chunks = 0;
-                                                      std::cout << "[Speech ended]\n";
-                                                      continue; // go fetch more audio
-                                                  }
+                        // Partial transcription
+                        auto now = std::chrono::steady_clock::now();
+                        std::chrono::duration<double> elapsed = now - last_infer_time;
+                        if (elapsed.count() >= MIN_REFRESH_SECS)
+                        {
+                            if (speech_buffer.size() >= MIN_MODEL_SAMPLES) {
+                                std::vector<float> speech(speech_buffer.size());
+                                // copy without popping
+                                for (size_t i = 0; i < speech_buffer.size(); ++i) {
+                                    speech[i] = speech_buffer.buffer[(speech_buffer.tail + i) % speech_buffer.capacity];
+                                }
 
-                                                  // Incremental refresh: run partial transcription every MIN_REFRESH_SECS
-                                                  auto now = std::chrono::steady_clock::now();
-                                                  std::chrono::duration<double> since_last = now - last_infer_time;
-                                                  if (since_last.count() >= MIN_REFRESH_SECS){
-                                                      try {
-                                                          auto tokens = model.generate(speech);
-                                                          std::string partial = model.detokenize(tokens);
-                                                          print_overwrite(std::string("Partial: ") + partial);
-                                                      } catch (const std::exception& e){
-                                                          print_overwrite(std::string("Partial error: ") + e.what());
-                                                      }
-                                                      last_infer_time = now;
-                                                  }
-                                              }
-                                          }
+                                try {
+                                    auto tokens = model.generate(speech);
+                                    std::string partial = model.detokenize(tokens);
+                                    print_overwrite("Partial: " + partial);
+                                }
+                                catch (...) {}
+                            }
+                            last_infer_time = now;
+                        }
+                    }
+                }
 
-                                          // On exit: flush remaining speech if any
-                                          if (!speech.empty()){
-                                              try {
-                                                  auto tokens = model.generate(speech);
-                                                  std::string final = model.detokenize(tokens);
-                                                  print_overwrite(std::string("Final: ") + final + "\n");
-                                              } catch (...) {
-                                                  // swallow
-                                              }
-                                          }
-                                      });
-
+                // Flush remaining
+                if (speech_buffer.size() > 0)
+                {
+                    std::vector<float> speech(speech_buffer.size());
+                    speech_buffer.pop(speech.data(), speech.size());
+                    try
+                    {
+                        auto tokens = model.generate(speech);
+                        std::string final = model.detokenize(tokens);
+                        print_overwrite("Final: " + final + "\n");
+                    }
+                    catch (...)
+                    {
+                    }
+                }
+            });
 
         std::cout << "Recording started (press Ctrl+C to stop)\n";
-        // main loop just waits for SIGINT
         while (running.load()) std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-        // Stop audio
         SDL_PauseAudioDevice(dev, 1);
+        capture_thread.join();
         transcribe_thread.join();
-
         SDL_CloseAudioDevice(dev);
         SDL_Quit();
-
-    } catch (const Ort::Exception& e){
-        std::cerr << "ONNX Runtime error: " << e.what() << "\n";
-        return 1;
-    } catch (const std::exception& e){
+    }
+    catch (const std::exception& e)
+    {
         std::cerr << "Error: " << e.what() << "\n";
         return 1;
     }

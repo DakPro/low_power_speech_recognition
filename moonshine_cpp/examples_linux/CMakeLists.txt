@@ -12,7 +12,7 @@ find_path(SNDFILE_INCLUDE_DIR
 )
 # Create example executables
 add_executable(moonshine_file file.cpp)
-add_executable(moonshine_live live.cpp alt_conio.cpp alt_conio.hpp)
+add_executable(moonshine_live live.cpp)
 
 target_link_libraries(moonshine_file PRIVATE moonshine ${SNDFILE_LIBRARY})
 target_include_directories(moonshine_file PRIVATE ${SNDFILE_INCLUDE_DIR})

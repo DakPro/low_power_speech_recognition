@@ -7,59 +7,9 @@
 #include <chrono>
 #include <thread>
 #include <atomic>
-#include <queue>
-#include <functional>
-#include <condition_variable>
 #include "alt_conio.hpp"
 #include <csignal> // Required for signal handling
-
-// Thread pool for transcription tasks
-class ThreadPool {
-public:
-    ThreadPool(size_t num_threads) : stop(false) {
-        for (size_t i = 0; i < num_threads; ++i) {
-            workers.emplace_back([this] {
-                for (;;) {
-                    std::function<void()> task;
-                    {
-                        std::unique_lock<std::mutex> lock(this->queue_mutex);
-                        this->condition.wait(lock, [this] { return this->stop || !this->tasks.empty(); });
-                        if (this->stop && this->tasks.empty()) return;
-                        task = this->tasks.front();
-                        this->tasks.pop();
-                    }
-                    task();
-                }
-            });
-        }
-    }
-
-    template <class F, class... Args>
-    void enqueue(F&& f, Args&&... args) {
-        {
-            std::unique_lock<std::mutex> lock(queue_mutex);
-            if (stop) throw std::runtime_error("enqueue on stopped ThreadPool");
-            tasks.emplace(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
-        }
-        condition.notify_one();
-    }
-
-    ~ThreadPool() {
-        {
-            std::unique_lock<std::mutex> lock(queue_mutex);
-            stop = true;
-        }
-        condition.notify_all();
-        for (std::thread& worker : workers) worker.join();
-    }
-
-private:
-    std::vector<std::thread> workers;
-    std::queue<std::function<void()>> tasks;
-    std::mutex queue_mutex;
-    std::condition_variable condition;
-    bool stop;
-};
+#include <onnxruntime_cxx_api.h>
 
 std::atomic<bool> running(true);
 
@@ -89,6 +39,17 @@ void listAudioDevices(){
 }
 
 int main(int argc, char* argv[]){
+    Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "moonshine");
+
+    Ort::SessionOptions session_options;
+    session_options.SetIntraOpNumThreads(4);
+
+    // Inter-op threads: number of ops that can run in parallel
+    session_options.SetInterOpNumThreads(4);
+    session_options.SetExecutionMode(ORT_PARALLEL);
+    session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+
+
     std::cout << "Moonshine Live Transcription\n";
     SDL_SetMainReady();  // Tell SDL we'll handle the main entry point
     if (argc != 2){
@@ -101,9 +62,6 @@ int main(int argc, char* argv[]){
         std::cout << "Initializing...\n";
         MoonshineModel model(argv[1]);
         std::cout << "Model initialized\n";
-
-        // Create a thread pool with 4 threads
-        ThreadPool pool(4);
 
         // Register signal handler for graceful shutdown
         std::signal(SIGINT, signalHandler);
@@ -154,10 +112,10 @@ int main(int argc, char* argv[]){
         // Start audio capture
         SDL_PauseAudioDevice(dev, 0);
 
-        std::thread audio_processing_thread(
+        std::thread transcription_thread(
                 [&]()
                 {
-                    std::cout << "Audio processing thread started\n";
+                    std::cout << "Transcribing...\n";
                     size_t last_buffer_size = 0;
                     while (running)
                     {
@@ -165,37 +123,43 @@ int main(int argc, char* argv[]){
                         {
                             if (audio_buffer.size() == last_buffer_size)
                             {
+                                // No new audio data
                                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
                                 continue;
                             }
                             last_buffer_size = audio_buffer.size();
 
-                            // Enqueue transcription task
-                            pool.enqueue([&, buffer = audio_buffer] {
-                                // Limit the buffer size to 10 seconds
-                                if (audio_buffer.size() > 10 * SAMPLE_RATE)
-                                {
-                                    audio_buffer.erase(audio_buffer.begin(), audio_buffer.end());
-                                }
+                            // Process audio buffer
+                            std::vector<float> buffer(audio_buffer.begin(), audio_buffer.end());
 
-                                auto start = std::chrono::high_resolution_clock::now();
-                                auto tokens = model.generate(buffer);
-                                auto end = std::chrono::high_resolution_clock::now();
-                                std::chrono::duration<double> duration = end - start;
+                            // Limit the buffer size to 10 seconds
+                            if (audio_buffer.size() > 10 * SAMPLE_RATE)
+                            {
+                                audio_buffer.erase(audio_buffer.begin(), audio_buffer.end());
+                            }
 
-                                std::string result = model.detokenize(tokens);
+                            // Generate tokens
+                            auto start = std::chrono::high_resolution_clock::now();
+                            auto tokens = model.generate(buffer);
+                            auto end = std::chrono::high_resolution_clock::now();
+                            std::chrono::duration<double> duration = end - start;
 
-                                std::cout << "\x1b[A";
-                                std::cout << "\r\033[K";
-                                std::cout << "Transcription: " << result << "\n";
-                            });
+                            // Detokenize tokens
+                            std::string result = model.detokenize(tokens);
+
+                            // erase the last console line
+                            std::cout << "\x1b[A";
+                            // clear the line
+                            std::cout << "\r\033[K";
+
+                            std::cout << "Transcription: " << result << "\n";
                         }
                         else
                         {
                             std::this_thread::sleep_for(std::chrono::milliseconds(100));
                         }
                     }
-                    std::cout << "Audio processing thread finished\n";
+                    std::cout << "Transcription thread finished\n";
                 });
 
         std::cout << "Recording... Press Ctrl+C to stop.\n";
@@ -214,8 +178,8 @@ int main(int argc, char* argv[]){
         // Stop audio capture
         SDL_PauseAudioDevice(dev, 1);
 
-        // Wait for audio processing thread to finish
-        audio_processing_thread.join();
+        // Wait for transcription thread to finish
+        transcription_thread.join();
 
         // Clean up
         SDL_CloseAudioDevice(dev);

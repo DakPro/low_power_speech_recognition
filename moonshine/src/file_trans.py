@@ -1,17 +1,18 @@
 from pathlib import Path
-
 import numpy
 from tokenizers import Tokenizer
 from .model import MoonshineOnnxModel
-
 from . import ASSETS_DIR
-
+from typing import *
 
 def load_audio(audio: str | Path) -> numpy.ndarray:
     import librosa
     audio, _ = librosa.load(audio, sr=16_000)
     return audio[None, ...]
 
+def chop(audio: numpy.ndarray) -> List[numpy.ndarray]:
+    print(type(audio))
+    return [audio]
 
 def assert_audio_size(audio: numpy.ndarray) -> float:
     assert len(audio.shape) == 2, "audio should be of shape [batch, samples]"
@@ -44,9 +45,11 @@ def transcribe(audio: str | numpy.ndarray, model_name: str = "moonshine/base") -
 
     audio = audio if isinstance(audio, numpy.ndarray) else load_audio(audio)
     assert_audio_size(audio)
-
-    tokens = model.generate(audio)
-    ans = tokenizer.decode_batch(tokens)
-    ans = '' if ans is None else ans[0]  # keeping the desired format
+    audio = chop(audio)
+    ans = ""
+    for segment in audio:
+        tokens = model.generate(segment)
+        result = tokenizer.decode_batch(tokens)
+        ans += "" if result is None else result[0];
     return ans
 

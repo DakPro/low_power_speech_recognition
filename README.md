@@ -39,13 +39,14 @@ For further details, see evaluation/README.md
 *UPL* - User Perceived Latency, or latency = average time it takes for a spoken word to get displayed. For models with
 segmental transcription, the result for the start of a segment is taken.   
 
-| Model               | sRTF on rPi 4 | RTF on rPi 4 | UPL*, seconds | WER on SPGISpeech | WER on Earnings22 | WER on AMI | 
-|---------------------|---------------|--------------|---------------|-------------------|-------------------|------------| 
-| Moonshine  (base)   | 0.28-0.35 (1) | 0.64         | 0.2 + 0.2×RTF |                   |                   |            | 
-| Whisper.cpp (tiny)  | 30xRTF/X **   | 0.39 (2)     | X + 30×RTF    |                   |                   |            |
-| Whisper.cpp (base)  | same as above | 0.74 (2)     | same as above |                   |                   |            |
-| Whisper.cpp (small) | same as above | 2.44 (2)     | same as above |                   |                   |            |
-| Kuytai              | \>1           | 10           | not feasible  |                   |                   |            |
+| Model                  | sRTF on rPi 4 | RTF on rPi 4 | UPL*, seconds | WER on SPGISpeech | WER on Earnings22 | WER on AMI | 
+|------------------------|---------------|--------------|---------------|-------------------|-------------------|------------| 
+| Moonshine  (base)      | 0.28-0.35 (1) | 0.64         | 0.2 + 0.2×RTF | --                | --                | --         |
+| Moonshine.cpp (base)   | --            | 0.54         | --            | "                 | "                 | "          |
+| Whisper.cpp (tiny.en)  | 30xRTF/X **   | 0.39 (2)     | X + 30×RTF    | 5.93              | --                | 24.24      |
+| Whisper.cpp (base.en)  | same as above | 0.74 (2)     | same as above | 4.26              | --                | 21.13      |
+| Whisper.cpp (small.en) | same as above | 2.44 (2)     | same as above | 3.6               | --                | 17.93      |
+| Kuytai                 | \>1           | 10           | not feasible  | --                | --                | --         |
 
 UPL* - listed UPLs are theoretical and valid only if RTF on device is < 1. 
 Formulas for values are given using standard configuration of models (read below for more details).

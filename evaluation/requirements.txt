@@ -2,3 +2,5 @@ librosa
 datasets==3.6.0
 evaluate
 jiwer
+matplotlib
+numpy

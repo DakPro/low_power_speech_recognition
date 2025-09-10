@@ -5,14 +5,15 @@ import sys
 from functools import partial
 
 import WER
-
+import RTF
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str, help='model name')
+    parser.add_argument('--model', "-m", type=str, help='model name')
     parser.add_argument('--wer', action='store_true', help='flag whether to evaluate WER')
+    parser.add_argument('--rtf', action='store_true', help='flag whether to evaluate rtf')
     parser.add_argument('--all', action='store_true', help='flag whether to evaluate WER and ___ (TODO);'
                                                            'if used, --wer and other such flags have no effect')
     parser.add_argument('-t', '--threads', type=int, help='number of threads')
@@ -22,11 +23,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
     model_name = args.model
     f_wer = args.wer
+    f_rtf = args.rtf
     if args.all:
         f_wer = True
 
     # REMINDER: after implementing new metrix, add them to the if statement in the next line
-    if not f_wer:
+    if not f_wer and not f_rtf:
         f_wer = True
 
     # moonshine
@@ -48,3 +50,5 @@ if __name__ == '__main__':
     # noinspection PyUnboundLocalVariable
     if f_wer:
         WER.evaluate(transcribe, streaming=args.streaming, threads=args.threads)
+    if f_rtf:
+        RTF.evaluate(transcribe)

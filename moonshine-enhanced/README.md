@@ -9,3 +9,6 @@ To use it, just copy moonshine-enhanced into your home directory and run
 
 After that, the model will start up itself on every load of the
 operating system.
+
+Current primitive version of the model implements "start/stop recording" commands. They are reconized
+using simple regex. The text during recording state is appended to a <code>recording.txt</code>.
